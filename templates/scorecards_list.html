@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %} — Scorecards{% endblock %}
+{% block nav_scorecards %}class="active"{% endblock %}
+
+{% block body %}
+<div class="shell">
+  <div class="page-header">
+    <h1>Scorecards</h1>
+    <a href="/scorecards/new" class="btn btn-primary">+ New scorecard</a>
+  </div>
+
+  {% if scorecards.is_empty() %}
+  <div class="empty-state">
+    <p>No scorecards yet.</p>
+    <a href="/scorecards/new" class="btn btn-primary">Create your first scorecard</a>
+  </div>
+  {% else %}
+  <div class="card">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Criteria</th>
+          <th>Created</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for sc in scorecards %}
+        <tr>
+          <td><a href="/scorecards/{{ sc.id }}">{{ sc.name }}</a></td>
+          <td>{{ sc.criterion_count }}</td>
+          <td>{{ sc.created_at.format("%d %b %Y") }}</td>
+          <td style="text-align:right">
+            <a href="/scorecards/{{ sc.id }}/edit" class="btn btn-secondary btn-sm">Edit</a>
+            <form method="post" action="/scorecards/{{ sc.id }}/delete" style="display:inline"
+                  onsubmit="return confirm('Delete this scorecard?')">
+              <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+
+{% block title %} — {{ scorecard.name }}{% endblock %}
+{% block nav_scorecards %}class="active"{% endblock %}
+
+{% block body %}
+<div class="shell">
+  <div class="page-header">
+    <h1>{{ scorecard.name }}</h1>
+    <div style="display:flex;gap:8px">
+      <a href="/scorecards/{{ scorecard.id }}/edit" class="btn btn-secondary">Edit</a>
+      <form method="post" action="/scorecards/{{ scorecard.id }}/delete"
+            onsubmit="return confirm('Delete this scorecard and all its data?')">
+        <button type="submit" class="btn btn-danger">Delete</button>
+      </form>
+    </div>
+  </div>
+
+  {% for criterion in criteria %}
+  <div class="card">
+    <div class="card-body">
+      <div class="card-title">{{ criterion.name }}</div>
+      <table class="table">
+        <thead>
+          <tr><th>Option</th><th>Type</th><th>Points</th></tr>
+        </thead>
+        <tbody>
+          {% for opt in criterion.options %}
+          <tr>
+            <td><code style="font-family:var(--mono);font-size:13px">{{ opt.name }}</code></td>
+            <td>{{ opt.score_type }}</td>
+            <td>{% if let Some(p) = opt.points %}{{ p }}{% else %}—{% endif %}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endblock %}

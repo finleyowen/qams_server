@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>QAMS{% block title %} {% endblock %}</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --ink:        #1a1a1a;
+  --ink-mid:    #555;
+  --ink-soft:   #888;
+  --rule:       #e0ddd8;
+  --surface:    #f9f8f6;
+  --white:      #ffffff;
+  --accent:     #2563eb;
+  --accent-bg:  #eff4ff;
+  --danger:     #c0392b;
+  --danger-bg:  #fdf2f2;
+  --success:    #166534;
+  --radius:     6px;
+  --font:       "Inter", "Segoe UI", system-ui, sans-serif;
+  --mono:       "JetBrains Mono", "Fira Code", "Consolas", monospace;
+}
+html { font-size: 15px; }
+body { font-family: var(--font); color: var(--ink); background: var(--surface); min-height: 100vh; }
+
+/* Nav */
+.site-nav {
+  background: var(--white);
+  border-bottom: 1px solid var(--rule);
+  padding: 0 40px;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  height: 52px;
+}
+.site-nav .wordmark {
+  font-size: 12px; font-weight: 700; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--ink-soft);
+  margin-right: 32px;
+}
+.site-nav a {
+  font-size: 14px; color: var(--ink-mid); text-decoration: none;
+  padding: 0 14px; height: 52px; display: flex; align-items: center;
+  border-bottom: 2px solid transparent; transition: color .12s, border-color .12s;
+}
+.site-nav a:hover { color: var(--ink); }
+.site-nav a.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+/* Layout */
+.shell { max-width: 960px; margin: 40px auto; padding: 0 24px; }
+
+/* Page header */
+.page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.page-header h1 { font-size: 22px; font-weight: 700; }
+
+/* Card */
+.card { background: var(--white); border: 1px solid var(--rule); border-radius: var(--radius); margin-bottom: 20px; }
+.card-body { padding: 24px; }
+.card-title { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-soft); margin-bottom: 16px; }
+
+/* Buttons */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: var(--radius);
+  font-family: var(--font); font-size: 14px; font-weight: 500;
+  cursor: pointer; border: 1.5px solid transparent; text-decoration: none;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.btn-primary { background: var(--accent); color: var(--white); border-color: var(--accent); }
+.btn-primary:hover { background: #1d4ed8; }
+.btn-secondary { background: var(--white); border-color: var(--rule); color: var(--ink-mid); }
+.btn-secondary:hover { border-color: #bbb; background: var(--surface); }
+.btn-danger { background: var(--white); border-color: var(--rule); color: var(--danger); }
+.btn-danger:hover { background: var(--danger-bg); border-color: var(--danger); }
+.btn-ghost { background: none; border-color: transparent; color: var(--ink-soft); padding: 6px 10px; }
+.btn-ghost:hover { background: var(--surface); color: var(--ink); }
+.btn-sm { padding: 5px 10px; font-size: 13px; }
+
+/* Forms */
+.form-group { margin-bottom: 18px; }
+.form-group label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-mid); margin-bottom: 5px; }
+.form-control {
+  width: 100%; padding: 8px 10px; font-family: var(--font); font-size: 14px;
+  color: var(--ink); background: var(--white); border: 1px solid var(--rule);
+  border-radius: var(--radius); outline: none; transition: border-color .15s;
+}
+.form-control:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+.form-control::placeholder { color: var(--ink-soft); }
+select.form-control { appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%23888' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center; padding-right: 28px;
+}
+.form-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 24px; }
+
+/* Table */
+.table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.table th, .table td { padding: 10px 14px; border-bottom: 1px solid var(--rule); text-align: left; }
+.table th { font-size: 12px; font-weight: 600; color: var(--ink-mid); text-transform: uppercase; letter-spacing: .06em; }
+.table tbody tr:last-child td { border-bottom: none; }
+.table tbody tr:hover td { background: var(--surface); }
+.table a { color: var(--accent); text-decoration: none; }
+.table a:hover { text-decoration: underline; }
+
+/* Alerts */
+.alert { padding: 12px 16px; border-radius: var(--radius); font-size: 14px; margin-bottom: 16px; }
+.alert-danger { background: var(--danger-bg); color: var(--danger); border: 1px solid #f5c6c6; }
+
+/* Empty state */
+.empty-state { text-align: center; padding: 60px 24px; color: var(--ink-soft); }
+.empty-state p { margin-bottom: 16px; }
+
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
+</style>
+{% block head %}{% endblock %}
+</head>
+<body>
+<nav class="site-nav">
+  <span class="wordmark">QAMS</span>
+  <a href="/scorecards" {% block nav_scorecards %}{% endblock %}>Scorecards</a>
+  <a href="/agents"     {% block nav_agents %}{% endblock %}>Agents</a>
+  <a href="/reviews"    {% block nav_reviews %}{% endblock %}>Reviews</a>
+  <a href="/reports"    {% block nav_reports %}{% endblock %}>Reports</a>
+</nav>
+{% block body %}{% endblock %}
+</body>
+</html>

@@ -5,7 +5,7 @@ mod models;
 
 use axum::{
     Router,
-    routing::get,
+    routing::{get, post},
 };
 use sqlx::mysql::MySqlPoolOptions;
 use std::net::SocketAddr;
@@ -65,8 +65,11 @@ pub fn router(state: AppState) -> Router {
         // ── Scorecards ────────────────────────────────────────────────────
         .route("/scorecards",              get(handlers::scorecards::list)
                                           .post(handlers::scorecards::create))
-        .route("/scorecards/{id}",         get(handlers::scorecards::show)
-                                          .delete(handlers::scorecards::delete))
+        .route("/scorecards/new",          get(handlers::scorecards::new_form))
+        .route("/scorecards/{id}",         get(handlers::scorecards::show))
+        .route("/scorecards/{id}/edit",    get(handlers::scorecards::edit_form)
+                                          .post(handlers::scorecards::update))
+        .route("/scorecards/{id}/delete",  post(handlers::scorecards::delete))
 
         // ── Agents ────────────────────────────────────────────────────────
         .route("/agents",                  get(handlers::agents::list)

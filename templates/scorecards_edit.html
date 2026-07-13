@@ -1,0 +1,343 @@
+{% extends "base.html" %}
+
+{% block title %}{% if is_edit %} — Edit {{ scorecard_name }}{% else %} — New Scorecard{% endif %}{% endblock %}
+{% block nav_scorecards %}class="active"{% endblock %}
+
+{% block head %}
+<style>
+/* ── Builder ─────────────────────────────────────────────── */
+.builder { display: flex; flex-direction: column; gap: 12px; }
+
+.criterion-card {
+  background: var(--white);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+
+.criterion-header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--surface);
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.criterion-header input {
+  flex: 1; font-size: 14px; font-weight: 600;
+  border: none; background: transparent; outline: none;
+  color: var(--ink);
+}
+.criterion-header input::placeholder { color: var(--ink-soft); font-weight: 400; }
+
+.drag-handle {
+  cursor: grab; color: var(--ink-soft); font-size: 16px;
+  user-select: none; padding: 0 4px;
+}
+.drag-handle:active { cursor: grabbing; }
+
+/* Options table */
+.options-table { width: 100%; border-collapse: collapse; }
+.options-table th {
+  padding: 8px 12px; font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .06em;
+  color: var(--ink-soft); border-bottom: 1px solid var(--rule);
+  text-align: left;
+}
+.options-table th.col-drag { width: 28px; }
+.options-table th.col-name { min-width: 140px; }
+.options-table th.col-type { width: 140px; }
+.options-table th.col-pts  { width: 90px; }
+.options-table th.col-del  { width: 36px; }
+
+.options-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: middle;
+}
+.options-table tbody tr:last-child td { border-bottom: none; }
+
+.options-table input[type="text"],
+.options-table input[type="number"],
+.options-table select {
+  width: 100%; padding: 5px 8px;
+  font-family: var(--font); font-size: 13px;
+  border: 1px solid var(--rule); border-radius: 4px;
+  outline: none; transition: border-color .15s;
+  background: var(--white); color: var(--ink);
+  appearance: none;
+}
+.options-table input:focus,
+.options-table select:focus {
+  border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg);
+}
+.options-table input[type="number"] { text-align: right; }
+.options-table input[type="number"]:disabled { background: var(--surface); color: var(--ink-soft); }
+
+.del-btn {
+  background: none; border: none; cursor: pointer;
+  color: var(--ink-soft); font-size: 16px; padding: 2px 4px;
+  border-radius: 3px; line-height: 1; transition: color .12s;
+}
+.del-btn:hover { color: var(--danger); }
+
+.criterion-footer {
+  padding: 8px 12px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+
+.add-criterion-btn {
+  display: flex; align-items: center; gap: 6px;
+  width: 100%; padding: 12px 16px;
+  background: var(--white); border: 1.5px dashed var(--rule);
+  border-radius: var(--radius); color: var(--ink-soft);
+  font-family: var(--font); font-size: 14px; cursor: pointer;
+  transition: border-color .12s, color .12s;
+}
+.add-criterion-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+/* Dragging state */
+.criterion-card.dragging { opacity: .4; }
+.criterion-card.drag-over { border-color: var(--accent); }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="shell">
+  <div class="page-header">
+    <h1>{% if is_edit %}Edit scorecard{% else %}New scorecard{% endif %}</h1>
+    <a href="/scorecards" class="btn btn-secondary">Cancel</a>
+  </div>
+
+  <form id="scorecard-form" method="post"
+        action="{% if is_edit %}/scorecards/{{ scorecard_id }}/edit{% else %}/scorecards{% endif %}">
+
+    <div class="card">
+      <div class="card-body">
+        <div class="form-group">
+          <label for="name">Scorecard name</label>
+          <input type="text" id="name" name="name" class="form-control"
+                 placeholder="e.g. Voice QA v2" required
+                 value="{{ scorecard_name }}">
+        </div>
+      </div>
+    </div>
+
+    <p class="card-title" style="margin-bottom:10px">Criteria</p>
+    <div class="builder" id="criteria-builder">
+      <!-- Populated by JS from existingData below -->
+    </div>
+
+    <button type="button" class="add-criterion-btn" id="add-criterion-btn">
+      + Add criterion
+    </button>
+
+    <!-- Hidden field carrying the serialised scorecard structure -->
+    <input type="hidden" name="criteria_json" id="criteria-json">
+
+    <div class="form-actions">
+      <a href="/scorecards" class="btn btn-secondary">Cancel</a>
+      <button type="submit" class="btn btn-primary" id="save-btn">
+        {% if is_edit %}Save changes{% else %}Create scorecard{% endif %}
+      </button>
+    </div>
+  </form>
+</div>
+
+<script>
+// ── Existing data (injected by Askama) ───────────────────────────────────────
+// On create this is []; on edit it's the full criteria array.
+const existingData = {{ existing_criteria_json }};
+
+// ── State ────────────────────────────────────────────────────────────────────
+let criteria = existingData.length > 0 ? existingData : [];
+let dragSrcIdx = null;
+
+// ── Render ───────────────────────────────────────────────────────────────────
+function render() {
+  const builder = document.getElementById('criteria-builder');
+  builder.innerHTML = '';
+  criteria.forEach((crit, ci) => {
+    builder.appendChild(makeCriterionCard(crit, ci));
+  });
+}
+
+function makeCriterionCard(crit, ci) {
+  const card = document.createElement('div');
+  card.className = 'criterion-card';
+  card.draggable = true;
+  card.dataset.idx = ci;
+
+  // Drag events
+  card.addEventListener('dragstart', e => {
+    dragSrcIdx = ci;
+    card.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  card.addEventListener('dragend', () => card.classList.remove('dragging'));
+  card.addEventListener('dragover', e => { e.preventDefault(); card.classList.add('drag-over'); });
+  card.addEventListener('dragleave', () => card.classList.remove('drag-over'));
+  card.addEventListener('drop', e => {
+    e.preventDefault();
+    card.classList.remove('drag-over');
+    if (dragSrcIdx !== null && dragSrcIdx !== ci) {
+      const moved = criteria.splice(dragSrcIdx, 1)[0];
+      criteria.splice(ci, 0, moved);
+      render();
+    }
+  });
+
+  card.innerHTML = `
+    <div class="criterion-header">
+      <span class="drag-handle" title="Drag to reorder">⠿</span>
+      <input type="text" placeholder="Criterion name" value="${esc(crit.name)}"
+             oninput="criteria[${ci}].name = this.value">
+      <button type="button" class="del-btn" title="Remove criterion"
+              onclick="removeCriterion(${ci})">✕</button>
+    </div>
+    <table class="options-table">
+      <thead>
+        <tr>
+          <th class="col-drag"></th>
+          <th class="col-name">Option name</th>
+          <th class="col-type">Score type</th>
+          <th class="col-pts">Points</th>
+          <th class="col-del"></th>
+        </tr>
+      </thead>
+      <tbody id="options-body-${ci}">
+      </tbody>
+    </table>
+    <div class="criterion-footer">
+      <button type="button" class="btn btn-ghost btn-sm"
+              onclick="addOption(${ci})">+ Add option</button>
+    </div>
+  `;
+
+  const tbody = card.querySelector(`#options-body-${ci}`);
+  crit.options.forEach((opt, oi) => {
+    tbody.appendChild(makeOptionRow(opt, ci, oi));
+  });
+
+  return card;
+}
+
+function makeOptionRow(opt, ci, oi) {
+  const tr = document.createElement('tr');
+  tr.draggable = true;
+  tr.dataset.oi = oi;
+
+  tr.addEventListener('dragstart', e => {
+    e.stopPropagation();
+    dragSrcIdx = oi;
+    tr.style.opacity = '.4';
+    e.dataTransfer.effectAllowed = 'move';
+  });
+  tr.addEventListener('dragend', () => tr.style.opacity = '');
+  tr.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); });
+  tr.addEventListener('drop', e => {
+    e.preventDefault(); e.stopPropagation();
+    if (dragSrcIdx !== null && dragSrcIdx !== oi) {
+      const moved = criteria[ci].options.splice(dragSrcIdx, 1)[0];
+      criteria[ci].options.splice(oi, 0, moved);
+      render();
+    }
+  });
+
+  const ptsDisabled = opt.score_type !== 'points' ? 'disabled' : '';
+  const ptsVal = opt.points != null ? opt.points : '';
+
+  tr.innerHTML = `
+    <td><span class="drag-handle" title="Drag to reorder">⠿</span></td>
+    <td><input type="text" placeholder="e.g. YES" value="${esc(opt.name)}"
+               oninput="criteria[${ci}].options[${oi}].name = this.value"></td>
+    <td>
+      <select onchange="onTypeChange(this, ${ci}, ${oi})">
+        <option value="points"   ${opt.score_type==='points'   ? 'selected':''}>Points</option>
+        <option value="na"       ${opt.score_type==='na'       ? 'selected':''}>Not applicable</option>
+        <option value="autofail" ${opt.score_type==='autofail' ? 'selected':''}>Autofail</option>
+      </select>
+    </td>
+    <td><input type="number" min="0" placeholder="0" value="${ptsVal}" ${ptsDisabled}
+               oninput="criteria[${ci}].options[${oi}].points = this.value === '' ? null : parseInt(this.value)"></td>
+    <td><button type="button" class="del-btn" onclick="removeOption(${ci},${oi})">✕</button></td>
+  `;
+  return tr;
+}
+
+// ── Mutations ────────────────────────────────────────────────────────────────
+function addCriterion() {
+  criteria.push({ name: '', options: [] });
+  render();
+  // Focus the new criterion's name input
+  const cards = document.querySelectorAll('.criterion-card');
+  const lastInput = cards[cards.length - 1]?.querySelector('input[type="text"]');
+  lastInput?.focus();
+}
+
+function removeCriterion(ci) {
+  criteria.splice(ci, 1);
+  render();
+}
+
+function addOption(ci) {
+  criteria[ci].options.push({ name: '', score_type: 'points', points: 1 });
+  render();
+  // Focus the new option's name input
+  const tbody = document.getElementById(`options-body-${ci}`);
+  const rows = tbody.querySelectorAll('tr');
+  rows[rows.length - 1]?.querySelector('input[type="text"]')?.focus();
+}
+
+function removeOption(ci, oi) {
+  criteria[ci].options.splice(oi, 1);
+  render();
+}
+
+function onTypeChange(select, ci, oi) {
+  const type = select.value;
+  criteria[ci].options[oi].score_type = type;
+  criteria[ci].options[oi].points = type === 'points' ? (criteria[ci].options[oi].points ?? 1) : null;
+  // Toggle the points input in-place without a full re-render
+  const row = select.closest('tr');
+  const ptsInput = row.querySelector('input[type="number"]');
+  ptsInput.disabled = type !== 'points';
+  if (type === 'points') ptsInput.focus();
+}
+
+// ── Serialise on submit ──────────────────────────────────────────────────────
+document.getElementById('scorecard-form').addEventListener('submit', e => {
+  // Basic validation
+  for (const crit of criteria) {
+    if (!crit.name.trim()) {
+      e.preventDefault();
+      alert('All criteria must have a name.');
+      return;
+    }
+    for (const opt of crit.options) {
+      if (!opt.name.trim()) {
+        e.preventDefault();
+        alert(`All options in "${crit.name}" must have a name.`);
+        return;
+      }
+      if (opt.score_type === 'points' && (opt.points === null || opt.points === undefined)) {
+        e.preventDefault();
+        alert(`Option "${opt.name}" in "${crit.name}" needs a points value.`);
+        return;
+      }
+    }
+  }
+  document.getElementById('criteria-json').value = JSON.stringify(criteria);
+});
+
+document.getElementById('add-criterion-btn').addEventListener('click', addCriterion);
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+render();
+if (criteria.length === 0) addCriterion();
+</script>
+{% endblock %}
