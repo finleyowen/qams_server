@@ -8,7 +8,6 @@ use std::collections::HashMap;
 
 use qams_core::{Report, Review, Scorecard};
 use crate::{db, error::{AppError, Result}, AppState};
-use crate::scorecard::parse_scorecard_csv;
 
 const DEFAULT_ACCUMULATION_PERIOD: u32 = 4;
 
@@ -83,9 +82,7 @@ pub async fn generate(
 /// reports, and assembles a `qams_core::Report` ready for rendering.
 async fn load_report_with_history(state: &AppState, report_id: u64) -> Result<(Report, Scorecard)> {
     let row = db::get_report(&state.db, report_id).await?;
-    let scorecard_row = db::get_scorecard(&state.db, row.scorecard_id).await?;
-    let scorecard = parse_scorecard_csv(&scorecard_row.csv)
-        .map_err(|e| AppError::Internal(e))?;
+    let scorecard = db::load_scorecard_core(&state.db, row.scorecard_id).await?;
 
     let review_rows = db::list_reviews_in_range(
         &state.db, row.scorecard_id, row.start_date, row.end_date,

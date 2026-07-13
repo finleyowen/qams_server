@@ -6,8 +6,33 @@ use sqlx::FromRow;
 pub struct ScorecardRow {
     pub id:         u64,
     pub name:       String,
-    pub csv:        String,
     pub created_at: NaiveDateTime,
+}
+
+/// A criterion belonging to a scorecard, with its display/sort order.
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct CriterionRow {
+    pub id:           u64,
+    pub scorecard_id: u64,
+    pub name:         String,
+    /// 0-based display order within the scorecard.
+    pub position:     u32,
+    pub created_at:   NaiveDateTime,
+}
+
+/// One selectable option on a criterion.
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct CriterionOptionRow {
+    pub id:           u64,
+    pub criterion_id: u64,
+    pub name:         String,
+    /// 0-based display order within the criterion.
+    pub position:     u32,
+    /// One of: "points", "na", "autofail"
+    pub score_type:   String,
+    /// Only set when score_type = "points".
+    pub points:       Option<u32>,
+    pub created_at:   NaiveDateTime,
 }
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
@@ -25,7 +50,9 @@ pub struct ReviewRow {
     pub agent_id:     u64,
     pub reviewer:     String,
     pub date:         NaiveDate,
+    /// JSON object: criterion name → selected option name.
     pub selections:   sqlx::types::Json<serde_json::Value>,
+    /// JSON object: criterion name → comment string.
     pub comments:     sqlx::types::Json<serde_json::Value>,
     pub score:        f64,
     pub adj_score:    Option<f64>,
