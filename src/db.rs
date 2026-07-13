@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::{error::{AppError, Result}, models::*};
 use sqlx::MySqlPool;
 use std::collections::HashMap;
