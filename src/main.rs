@@ -81,8 +81,9 @@ pub fn router(state: AppState) -> Router {
         // ── Reviews ───────────────────────────────────────────────────────
         // GET /reviews renders a blank review form for a given scorecard.
         // POST /reviews submits a completed review.
-        .route("/reviews",                 get(handlers::reviews::form)
+        .route("/reviews",                 get(handlers::reviews::index)
                                           .post(handlers::reviews::submit))
+        .route("/reviews/form",             get(handlers::reviews::form))
         .route("/reviews/{id}",            get(handlers::reviews::show))
 
         // ── Reports ───────────────────────────────────────────────────────

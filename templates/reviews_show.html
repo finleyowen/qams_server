@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+
+{% block title %} — Review #{{ review.id }}{% endblock %}
+{% block nav_reviews %}class="active"{% endblock %}
+
+{% block body %}
+<div class="shell">
+  <div class="page-header">
+    <h1>Review #{{ review.id }}</h1>
+    <a href="/reviews" class="btn btn-secondary">New review</a>
+  </div>
+
+  <div class="card" style="margin-bottom:20px">
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:18px">
+        <div>
+          <p style="font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px">Agent</p>
+          <p><a href="/agents/{{ review.agent_id }}">{{ agent_name }}</a></p>
+        </div>
+        <div>
+          <p style="font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px">Reviewer</p>
+          <p>{{ review.reviewer }}</p>
+        </div>
+        <div>
+          <p style="font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px">Date</p>
+          <p>{{ review.date.format("%d %b %Y") }}</p>
+        </div>
+        <div>
+          <p style="font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px">Score</p>
+          <p style="font-size:18px;font-weight:700">{{ score_display }}</p>
+        </div>
+      </div>
+      {% if let Some(_) = review.adj_score %}
+      <p style="margin-top:10px;font-size:13px;color:var(--ink-soft)">
+        Adjusted score: <strong>{{ adj_score_display }}</strong>
+      </p>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <p class="card-title">Selections</p>
+      <table class="table">
+        <thead>
+          <tr><th>Criterion</th><th>Selection</th><th>Comment</th></tr>
+        </thead>
+        <tbody>
+          {% for entry in selection_entries %}
+          <tr>
+            <td><code style="font-family:var(--mono);font-size:13px">{{ entry.criterion }}</code></td>
+            <td>{{ entry.option }}</td>
+            <td style="color:var(--ink-soft)">
+              {% if entry.comment.is_empty() %}—{% else %}{{ entry.comment }}{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}
