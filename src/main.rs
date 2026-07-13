@@ -74,8 +74,9 @@ pub fn router(state: AppState) -> Router {
         // ── Agents ────────────────────────────────────────────────────────
         .route("/agents",                  get(handlers::agents::list)
                                           .post(handlers::agents::create))
-        .route("/agents/{id}",             get(handlers::agents::show)
-                                          .delete(handlers::agents::delete))
+        .route("/agents/new",               get(handlers::agents::new_form))
+        .route("/agents/{id}",             get(handlers::agents::show))
+        .route("/agents/{id}/delete",      post(handlers::agents::delete))
 
         // ── Reviews ───────────────────────────────────────────────────────
         // GET /reviews renders a blank review form for a given scorecard.

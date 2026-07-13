@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %} — Agents{% endblock %}
+{% block nav_agents %}class="active"{% endblock %}
+
+{% block body %}
+<div class="shell">
+  <div class="page-header">
+    <h1>Agents</h1>
+    <a href="/agents/new" class="btn btn-primary">+ Add agent</a>
+  </div>
+
+  {% if agents.is_empty() %}
+  <div class="empty-state">
+    <p>No agents yet.</p>
+    <a href="/agents/new" class="btn btn-primary">Add your first agent</a>
+  </div>
+  {% else %}
+  <div class="card">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Added</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for agent in agents %}
+        <tr>
+          <td><a href="/agents/{{ agent.id }}">{{ agent.name }}</a></td>
+          <td>{{ agent.created_at.format("%d %b %Y") }}</td>
+          <td style="text-align:right">
+            <form method="post" action="/agents/{{ agent.id }}/delete" style="display:inline"
+                  onsubmit="return confirm('Remove {{ agent.name }}?')">
+              <button type="submit" class="btn btn-danger btn-sm">Remove</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

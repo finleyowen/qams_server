@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %} — Add Agent{% endblock %}
+{% block nav_agents %}class="active"{% endblock %}
+
+{% block head %}
+<style>
+.metadata-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+.metadata-table td { padding: 6px 8px 6px 0; vertical-align: middle; }
+.metadata-table td:last-child { width: 36px; text-align: center; }
+.metadata-table input {
+  width: 100%; padding: 7px 10px;
+  font-family: var(--font); font-size: 14px;
+  border: 1px solid var(--rule); border-radius: var(--radius);
+  outline: none; transition: border-color .15s;
+}
+.metadata-table input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+.metadata-table input::placeholder { color: var(--ink-soft); }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="shell">
+  <div class="page-header">
+    <h1>Add agent</h1>
+    <a href="/agents" class="btn btn-secondary">Cancel</a>
+  </div>
+
+  <form id="agent-form" method="post" action="/agents">
+
+    <div class="card">
+      <div class="card-body">
+        <div class="form-group">
+          <label for="name">Name</label>
+          <input type="text" id="name" name="name" class="form-control"
+                 placeholder="e.g. Alice Nguyen" required autofocus>
+        </div>
+
+        <div class="form-group" style="margin-bottom:0">
+          <label>Metadata <span style="font-weight:400;color:var(--ink-soft)">(optional key-value pairs)</span></label>
+          <table class="metadata-table" id="metadata-table">
+            <tbody id="metadata-body">
+              <!-- rows added by JS -->
+            </tbody>
+          </table>
+          <button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px"
+                  onclick="addRow()">+ Add field</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Serialised metadata JSON -->
+    <input type="hidden" name="metadata" id="metadata-hidden">
+
+    <div class="form-actions">
+      <a href="/agents" class="btn btn-secondary">Cancel</a>
+      <button type="submit" class="btn btn-primary">Add agent</button>
+    </div>
+  </form>
+</div>
+
+<script>
+function addRow(key = '', value = '') {
+  const tbody = document.getElementById('metadata-body');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="text" placeholder="Key" value="${esc(key)}" class="meta-key"></td>
+    <td style="width:16px;color:var(--ink-soft);text-align:center">→</td>
+    <td><input type="text" placeholder="Value" value="${esc(value)}" class="meta-val"></td>
+    <td><button type="button" class="del-btn" onclick="this.closest('tr').remove()">✕</button></td>
+  `;
+  tbody.appendChild(tr);
+  tr.querySelector('.meta-key').focus();
+}
+
+document.getElementById('agent-form').addEventListener('submit', () => {
+  const rows = document.querySelectorAll('#metadata-body tr');
+  const obj = {};
+  rows.forEach(row => {
+    const key = row.querySelector('.meta-key').value.trim();
+    const val = row.querySelector('.meta-val').value.trim();
+    if (key) obj[key] = val;
+  });
+  document.getElementById('metadata-hidden').value = JSON.stringify(obj);
+});
+
+function esc(s) {
+  return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+}
+</script>
+{% endblock %}
