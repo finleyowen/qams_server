@@ -61,10 +61,12 @@ pub struct ReviewRow {
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct ReportRow {
-    pub id:           u64,
-    pub scorecard_id: u64,
-    pub label:        String,
-    pub start_date:   NaiveDate,
-    pub end_date:     NaiveDate,
-    pub created_at:   NaiveDateTime,
+    pub id:                   u64,
+    pub scorecard_id:         u64,
+    pub label:                String,
+    pub start_date:           NaiveDate,
+    pub end_date:             NaiveDate,
+    /// NULL means use all available previous reports.
+    pub accumulation_period:  Option<u32>,
+    pub created_at:           NaiveDateTime,
 }

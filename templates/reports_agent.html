@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %} — {{ agent_name }}: {{ report_label }}{% endblock %}
+{% block nav_reports %}class="active"{% endblock %}
+
+{% block head %}
+<style>
+.report-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.report-table th, .report-table td {
+  padding: 10px 14px; border: 1px solid var(--rule); text-align: center; vertical-align: top;
+}
+.report-table th { background: var(--surface); font-size: 12px; font-weight: 600; color: var(--ink-mid); }
+.col-label { text-align: left !important; min-width: 180px; }
+.no-data { color: var(--ink-soft); }
+.sub-header { font-weight: 400; font-size: 12px; color: var(--ink-soft); }
+.sub-header .reviewer { font-size: 11px; color: var(--ink-soft); }
+
+.opt-cell { cursor: default; }
+.opt-cell.has-comment { cursor: pointer; text-decoration: underline dotted var(--ink-soft); }
+.comment-bubble {
+  display: none; margin-top: 6px; padding: 6px 8px;
+  background: var(--surface); border: 1px solid var(--rule);
+  border-radius: var(--radius); font-size: 12px; color: var(--ink-mid);
+  text-align: left; white-space: normal;
+}
+
+.opt-na       { color: #4b5563; }
+.opt-autofail { color: var(--danger); font-weight: 600; }
+.opt-full     { color: var(--success); font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="shell">
+  <div class="page-header">
+    <h1>{{ agent_name }}</h1>
+    <div style="display:flex;gap:8px">
+      <a href="/reports/{{ report_id }}/agents" class="btn btn-secondary">← Agent index</a>
+    </div>
+  </div>
+
+  <p style="color:var(--ink-soft);font-size:13px;margin-bottom:16px">
+    {{ report_label }} — all reviews in the current reporting period.
+    Click a cell to reveal the QA comment where one was left.
+  </p>
+
+  {% if review_headers.is_empty() %}
+  <div class="empty-state">
+    <p>No reviews for {{ agent_name }} in this reporting period.</p>
+  </div>
+  {% else %}
+  <div class="card">
+    <div class="card-body" style="overflow-x:auto">
+      <table class="report-table">
+        <thead>
+          <tr>
+            <th class="col-label">Criterion</th>
+            {% for header in review_headers %}
+            <th>
+              {{ header.date }}
+              <br><span class="sub-header reviewer">{{ header.reviewer }}</span>
+              {% if let Some(score) = header.score_display %}
+              <br><span class="sub-header" style="color:var(--accent)">{{ score }}</span>
+              {% endif %}
+            </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in criterion_rows %}
+          <tr>
+            <td class="col-label"><code style="font-family:var(--mono);font-size:13px">{{ row.criterion }}</code></td>
+            {% for cell in row.cells %}
+            <td class="opt-cell {% if cell.has_comment %}has-comment{% endif %} {{ cell.css_class }}"
+                onclick="toggleComment(this)">
+              {{ cell.option }}
+              {% if cell.has_comment %}
+              <div class="comment-bubble">{{ cell.comment }}</div>
+              {% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+function toggleComment(cell) {
+  const bubble = cell.querySelector('.comment-bubble');
+  if (bubble) bubble.style.display = bubble.style.display === 'block' ? 'none' : 'block';
+}
+</script>
+{% endblock %}

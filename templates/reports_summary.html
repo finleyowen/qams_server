@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %} — Summary: {{ report_label }}{% endblock %}
+{% block nav_reports %}class="active"{% endblock %}
+
+{% block head %}
+<style>
+.report-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.report-table th, .report-table td {
+  padding: 10px 14px; border: 1px solid var(--rule); text-align: center;
+}
+.report-table th { background: var(--surface); font-size: 12px; font-weight: 600; color: var(--ink-mid); }
+.col-label { text-align: left !important; min-width: 180px; }
+.no-data { color: var(--ink-soft); }
+.cell-high { background: #f0fdf4; color: var(--success); font-weight: 600; }
+.cell-mid  { background: #fffbeb; color: var(--warn, #b45309); }
+.cell-low  { background: var(--danger-bg); color: var(--danger); }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="shell">
+  <div class="page-header">
+    <h1>Overall Summary</h1>
+    <div style="display:flex;gap:8px">
+      <a href="/reports/{{ report_id }}" class="btn btn-secondary">← Report</a>
+      <a href="/reports/{{ report_id }}/agents" class="btn btn-secondary">Agent index →</a>
+    </div>
+  </div>
+
+  <p style="color:var(--ink-soft);font-size:13px;margin-bottom:16px">
+    Average score per criterion across all agents, per report period.
+  </p>
+
+  <div class="card">
+    <div class="card-body" style="overflow-x:auto">
+      <table class="report-table">
+        <thead>
+          <tr>
+            <th class="col-label">Criterion</th>
+            {% for col in column_labels %}
+            <th{% if col.is_current %} style="border-bottom:2px solid var(--accent)"{% endif %}>
+              {{ col.label }}
+              {% if col.is_current %}<br><span style="font-size:11px;color:var(--accent)">current</span>{% endif %}
+            </th>
+            {% endfor %}
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in rows %}
+          <tr>
+            <td class="col-label"><code style="font-family:var(--mono);font-size:13px">{{ row.criterion }}</code></td>
+            {% for cell in row.cells %}
+            <td class="{% if cell.is_empty %}no-data{% else if cell.value >= 80.0 %}cell-high{% else if cell.value >= 60.0 %}cell-mid{% else %}cell-low{% endif %}">
+              {% if cell.is_empty %}—{% else %}{{ cell.display }}{% endif %}
+            </td>
+            {% endfor %}
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

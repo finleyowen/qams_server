@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %} — Reports{% endblock %}
+{% block nav_reports %}class="active"{% endblock %}
+
+{% block body %}
+<div class="shell">
+  <div class="page-header">
+    <h1>Reports</h1>
+    <a href="/reports/new" class="btn btn-primary">+ Generate report</a>
+  </div>
+
+  {% if reports.is_empty() %}
+  <div class="empty-state">
+    <p>No reports yet.</p>
+    <a href="/reports/new" class="btn btn-primary">Generate your first report</a>
+  </div>
+  {% else %}
+  <div class="card">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Label</th>
+          <th>Period</th>
+          <th>Generated</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for report in reports %}
+        <tr>
+          <td><a href="/reports/{{ report.id }}">{{ report.label }}</a></td>
+          <td>{{ report.start_date }} → {{ report.end_date }}</td>
+          <td>{{ report.created_at.format("%d %b %Y") }}</td>
+          <td style="text-align:right">
+            <a href="/reports/{{ report.id }}/summary" class="btn btn-secondary btn-sm">Summary</a>
+            <a href="/reports/{{ report.id }}/agents"  class="btn btn-secondary btn-sm">Agents</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

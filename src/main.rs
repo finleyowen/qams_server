@@ -89,6 +89,7 @@ pub fn router(state: AppState) -> Router {
         // ── Reports ───────────────────────────────────────────────────────
         .route("/reports",                 get(handlers::reports::list)
                                           .post(handlers::reports::generate))
+        .route("/reports/new",              get(handlers::reports::new_form))
         .route("/reports/{id}",            get(handlers::reports::show))
         .route("/reports/{id}/summary",    get(handlers::reports::summary))
         .route("/reports/{id}/agents",     get(handlers::reports::agent_index))

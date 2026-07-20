@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::{error::{AppError, Result}, models::*};
 use sqlx::MySqlPool;
 use std::collections::HashMap;
@@ -256,7 +254,7 @@ pub async fn insert_review(
 pub async fn list_reports(db: &MySqlPool) -> Result<Vec<ReportRow>> {
     Ok(sqlx::query_as!(
         ReportRow,
-        "SELECT id, scorecard_id, label, start_date, end_date, created_at
+        "SELECT id, scorecard_id, label, start_date, end_date, accumulation_period, created_at
          FROM reports ORDER BY start_date DESC"
     ).fetch_all(db).await?)
 }
@@ -264,7 +262,7 @@ pub async fn list_reports(db: &MySqlPool) -> Result<Vec<ReportRow>> {
 pub async fn get_report(db: &MySqlPool, id: u64) -> Result<ReportRow> {
     sqlx::query_as!(
         ReportRow,
-        "SELECT id, scorecard_id, label, start_date, end_date, created_at
+        "SELECT id, scorecard_id, label, start_date, end_date, accumulation_period, created_at
          FROM reports WHERE id = ?",
         id
     ).fetch_optional(db).await?
@@ -279,7 +277,7 @@ pub async fn previous_reports(
 ) -> Result<Vec<ReportRow>> {
     Ok(sqlx::query_as!(
         ReportRow,
-        "SELECT id, scorecard_id, label, start_date, end_date, created_at
+        "SELECT id, scorecard_id, label, start_date, end_date, accumulation_period, created_at
          FROM reports
          WHERE scorecard_id = ? AND start_date < ?
          ORDER BY start_date DESC
@@ -294,10 +292,25 @@ pub async fn insert_report(
     label: &str,
     start_date: chrono::NaiveDate,
     end_date: chrono::NaiveDate,
+    accumulation_period: Option<u32>,
 ) -> Result<u64> {
     let result = sqlx::query!(
-        "INSERT INTO reports (scorecard_id, label, start_date, end_date) VALUES (?, ?, ?, ?)",
-        scorecard_id, label, start_date, end_date
+        "INSERT INTO reports (scorecard_id, label, start_date, end_date, accumulation_period) VALUES (?, ?, ?, ?, ?)",
+        scorecard_id, label, start_date, end_date, accumulation_period
     ).execute(db).await?;
     Ok(result.last_insert_id())
+}
+
+/// Returns how many previous reports exist for a scorecard before a given date.
+/// Used to implement the "all available" accumulation period default.
+pub async fn count_previous_reports(
+    db: &MySqlPool,
+    scorecard_id: u64,
+    before_start_date: chrono::NaiveDate,
+) -> Result<u32> {
+    let row = sqlx::query!(
+        "SELECT COUNT(*) as count FROM reports WHERE scorecard_id = ? AND start_date < ?",
+        scorecard_id, before_start_date
+    ).fetch_one(db).await?;
+    Ok(row.count as u32)
 }

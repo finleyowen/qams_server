@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %} — {{ report_label }}{% endblock %}
+{% block nav_reports %}class="active"{% endblock %}
+
+{% block body %}
+<div class="shell">
+  <div class="page-header">
+    <h1>{{ report_label }}</h1>
+    <a href="/reports" class="btn btn-secondary">← All reports</a>
+  </div>
+
+  <div class="card">
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:24px">
+        <div>
+          <p style="font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px">Scorecard</p>
+          <p><a href="/scorecards/{{ scorecard_id }}">{{ scorecard_name }}</a></p>
+        </div>
+        <div>
+          <p style="font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px">Period</p>
+          <p>{{ start_date }} → {{ end_date }}</p>
+        </div>
+        <div>
+          <p style="font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px">Reviews</p>
+          <p>{{ review_count }}</p>
+        </div>
+        <div>
+          <p style="font-size:12px;font-weight:600;color:var(--ink-soft);margin-bottom:4px">Accumulation</p>
+          <p>{{ accumulation_display }}</p>
+        </div>
+      </div>
+
+      <p class="card-title">Views</p>
+      <ul class="page-list">
+        <li><a href="/reports/{{ report_id }}/summary">Overall summary</a> — average score per criterion across all agents</li>
+        <li><a href="/reports/{{ report_id }}/agents">Agent-report index</a> — average score per agent across reports</li>
+      </ul>
+
+      {% if !agent_links.is_empty() %}
+      <p class="card-title" style="margin-top:20px">Individual agent views</p>
+      <ul class="page-list">
+        {% for (agent_id, agent_name) in agent_links %}
+        <li><a href="/reports/{{ report_id }}/agents/{{ agent_id }}">{{ agent_name }}</a></li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
