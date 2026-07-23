@@ -24,6 +24,9 @@
 }
 html { font-size: 15px; }
 body { font-family: var(--font); color: var(--ink); background: var(--surface); min-height: 100vh; }
+a { color: var(--ink); text-decoration: underline; }
+a:visited { color: var(--ink); }
+a:hover { color: var(--ink-mid); }
 
 /* Nav */
 .site-nav {
@@ -100,7 +103,7 @@ select.form-control { appearance: none;
 .table th { font-size: 12px; font-weight: 600; color: var(--ink-mid); text-transform: uppercase; letter-spacing: .06em; }
 .table tbody tr:last-child td { border-bottom: none; }
 .table tbody tr:hover td { background: var(--surface); }
-.table a { color: var(--accent); text-decoration: none; }
+.table a { text-decoration: none; }
 .table a:hover { text-decoration: underline; }
 
 /* Alerts */
