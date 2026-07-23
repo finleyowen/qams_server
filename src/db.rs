@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use crate::{error::{AppError, Result}, models::*};
 use sqlx::MySqlPool;
 use std::collections::HashMap;
@@ -8,24 +9,33 @@ use qams_core::{Criterion, CriterionScore, Scorecard};
 pub async fn list_scorecards(db: &MySqlPool) -> Result<Vec<ScorecardRow>> {
     Ok(sqlx::query_as!(
         ScorecardRow,
-        "SELECT id, name, created_at FROM scorecards ORDER BY created_at DESC"
+        "SELECT id, name, default_period_days, created_at FROM scorecards ORDER BY created_at DESC"
     ).fetch_all(db).await?)
 }
 
 pub async fn get_scorecard(db: &MySqlPool, id: u64) -> Result<ScorecardRow> {
     sqlx::query_as!(
         ScorecardRow,
-        "SELECT id, name, created_at FROM scorecards WHERE id = ?",
+        "SELECT id, name, default_period_days, created_at FROM scorecards WHERE id = ?",
         id
     ).fetch_optional(db).await?
     .ok_or(AppError::NotFound)
 }
 
-pub async fn insert_scorecard(db: &MySqlPool, name: &str) -> Result<u64> {
+pub async fn insert_scorecard(db: &MySqlPool, name: &str, default_period_days: Option<u32>) -> Result<u64> {
     let result = sqlx::query!(
-        "INSERT INTO scorecards (name) VALUES (?)", name
+        "INSERT INTO scorecards (name, default_period_days) VALUES (?, ?)",
+        name, default_period_days
     ).execute(db).await?;
     Ok(result.last_insert_id())
+}
+
+pub async fn update_scorecard_name(db: &MySqlPool, id: u64, name: &str, default_period_days: Option<u32>) -> Result<()> {
+    sqlx::query!(
+        "UPDATE scorecards SET name = ?, default_period_days = ? WHERE id = ?",
+        name, default_period_days, id
+    ).execute(db).await?;
+    Ok(())
 }
 
 pub async fn delete_scorecard(db: &MySqlPool, id: u64) -> Result<()> {
@@ -313,4 +323,17 @@ pub async fn count_previous_reports(
         scorecard_id, before_start_date
     ).fetch_one(db).await?;
     Ok(row.count as u32)
+}
+
+/// Returns the end date of the most recent report for a given scorecard,
+/// used to auto-fill the next report's start date.
+pub async fn last_report_end_date(
+    db: &MySqlPool,
+    scorecard_id: u64,
+) -> Result<Option<chrono::NaiveDate>> {
+    let row = sqlx::query!(
+        "SELECT end_date FROM reports WHERE scorecard_id = ? ORDER BY end_date DESC LIMIT 1",
+        scorecard_id
+    ).fetch_optional(db).await?;
+    Ok(row.map(|r| r.end_date))
 }

@@ -20,11 +20,17 @@
     <div class="card-body">
       <form method="post" action="/reports">
         <div class="form-group">
+          <label for="label">Report name <span style="font-weight:400;color:var(--ink-soft)">(optional — defaults to date range)</span></label>
+          <input type="text" id="label" name="label" class="form-control" placeholder="e.g. Week 24">
+        </div>
+        <div class="form-group">
           <label for="scorecard_id">Scorecard</label>
           <select id="scorecard_id" name="scorecard_id" class="form-control" required>
             <option value="" disabled selected>Select…</option>
             {% for sc in scorecards %}
-            <option value="{{ sc.id }}">{{ sc.name }}</option>
+            <option value="{{ sc.id }}"
+              data-period-days="{% if let Some(d) = sc.default_period_days %}{{ d }}{% endif %}"
+              data-last-end="{{ sc.last_report_end }}">{{ sc.name }}</option>
             {% endfor %}
           </select>
         </div>
@@ -55,4 +61,32 @@
   </div>
   {% endif %}
 </div>
+
+<script>
+document.getElementById('scorecard_id').addEventListener('change', function () {
+  const opt        = this.options[this.selectedIndex];
+  const periodDays = parseInt(opt.dataset.periodDays);
+  const lastEnd    = opt.dataset.lastEnd;
+
+  if (!periodDays) return; // no default set for this scorecard
+
+  // Start = day after previous report ended, or today if no previous report.
+  let start;
+  if (lastEnd) {
+    const prev = new Date(lastEnd);
+    prev.setDate(prev.getDate() + 1);
+    start = prev;
+  } else {
+    start = new Date();
+  }
+
+  // End = start + duration - 1 day (inclusive).
+  const end = new Date(start);
+  end.setDate(end.getDate() + periodDays - 1);
+
+  const fmt = d => d.toISOString().slice(0, 10);
+  document.getElementById('start_date').value = fmt(start);
+  document.getElementById('end_date').value   = fmt(end);
+});
+</script>
 {% endblock %}

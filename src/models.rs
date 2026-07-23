@@ -4,9 +4,11 @@ use sqlx::FromRow;
 
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct ScorecardRow {
-    pub id:         u64,
-    pub name:       String,
-    pub created_at: NaiveDateTime,
+    pub id:                  u64,
+    pub name:                String,
+    /// Default reporting period length in days. None means no default.
+    pub default_period_days: Option<u32>,
+    pub created_at:          NaiveDateTime,
 }
 
 /// A criterion belonging to a scorecard, with its display/sort order.

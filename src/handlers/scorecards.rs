@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-
 use askama::Template;
 use axum::{
     extract::{Path, State},
@@ -14,10 +13,10 @@ use crate::{db, error::{AppError, Result}, models::{CriterionOptionRow, Scorecar
 
 /// Scorecard enriched with its criterion count for the list view.
 pub struct ScorecardSummary {
-    pub id:              u64,
-    pub name:            String,
-    pub criterion_count: usize,
-    pub created_at:      chrono::NaiveDateTime,
+    pub id:                  u64,
+    pub name:                String,
+    pub criterion_count:     usize,
+    pub created_at:          chrono::NaiveDateTime,
 }
 
 /// Criterion enriched with its options for the show/edit views.
@@ -47,6 +46,7 @@ struct EditTemplate {
     is_edit:                bool,
     scorecard_id:           u64,
     scorecard_name:         String,
+    default_period_days:    String,
     /// JSON array of criteria for the JS builder's `existingData`.
     existing_criteria_json: String,
 }
@@ -104,6 +104,7 @@ pub async fn new_form(State(_state): State<AppState>) -> Result<impl IntoRespons
         is_edit:                false,
         scorecard_id:           0,
         scorecard_name:         String::new(),
+        default_period_days:    String::new(),
         existing_criteria_json: "[]".to_string(),
     })
 }
@@ -135,6 +136,7 @@ pub async fn edit_form(
         is_edit:                true,
         scorecard_id:           id,
         scorecard_name:         scorecard.name,
+        default_period_days:    scorecard.default_period_days.map(|d| d.to_string()).unwrap_or_default(),
         existing_criteria_json: serde_json::to_string(&criteria_json).unwrap_or_else(|_| "[]".into()),
     })
 }
@@ -143,8 +145,13 @@ pub async fn edit_form(
 
 #[derive(Deserialize)]
 pub struct ScorecardForm {
-    pub name:          String,
-    pub criteria_json: String,
+    pub name:                String,
+    pub criteria_json:       String,
+    pub default_period_days: Option<String>,
+}
+
+fn parse_period_days(s: &Option<String>) -> Option<u32> {
+    s.as_deref().filter(|s| !s.is_empty()).and_then(|s| s.parse().ok())
 }
 
 #[derive(Deserialize)]
@@ -167,7 +174,8 @@ pub async fn create(
     Form(form): Form<ScorecardForm>,
 ) -> Result<impl IntoResponse> {
     let criteria = parse_and_validate_criteria(&form.criteria_json)?;
-    let scorecard_id = insert_scorecard_with_criteria(&state, &form.name, &criteria).await?;
+    let period_days = parse_period_days(&form.default_period_days);
+    let scorecard_id = insert_scorecard_with_criteria(&state, &form.name, period_days, &criteria).await?;
     Ok(axum::response::Redirect::to(&format!("/scorecards/{scorecard_id}")))
 }
 
@@ -184,7 +192,8 @@ pub async fn update(
 
     let mut tx = state.db.begin().await?;
 
-    sqlx::query!("UPDATE scorecards SET name = ? WHERE id = ?", form.name, id)
+    let period_days = parse_period_days(&form.default_period_days);
+    sqlx::query!("UPDATE scorecards SET name = ?, default_period_days = ? WHERE id = ?", form.name, period_days, id)
         .execute(&mut *tx).await?;
 
     // Replace all criteria+options atomically; CASCADE handles criterion_options.
@@ -257,12 +266,13 @@ fn parse_and_validate_criteria(criteria_json: &str) -> Result<Vec<CriterionInput
 async fn insert_scorecard_with_criteria(
     state: &AppState,
     name: &str,
+    default_period_days: Option<u32>,
     criteria: &[CriterionInput],
 ) -> Result<u64> {
     let mut tx = state.db.begin().await?;
 
     let scorecard_id = sqlx::query!(
-        "INSERT INTO scorecards (name) VALUES (?)", name
+        "INSERT INTO scorecards (name, default_period_days) VALUES (?, ?)", name, default_period_days
     ).execute(&mut *tx).await?.last_insert_id();
 
     for (crit_pos, crit) in criteria.iter().enumerate() {

@@ -76,10 +76,19 @@ struct ListTemplate {
     reports: Vec<crate::models::ReportRow>,
 }
 
+/// Scorecard data enriched with the last report end date for auto-fill.
+pub struct ScorecardWithLastReport {
+    pub id:                  u64,
+    pub name:                String,
+    pub default_period_days: Option<u32>,
+    /// ISO date string of most recent report end, or empty string.
+    pub last_report_end:     String,
+}
+
 #[derive(Template)]
 #[template(path = "reports_new.html")]
 struct NewTemplate {
-    scorecards: Vec<crate::models::ScorecardRow>,
+    scorecards: Vec<ScorecardWithLastReport>,
 }
 
 #[derive(Template)]
@@ -138,7 +147,19 @@ pub async fn list(State(state): State<AppState>) -> Result<impl IntoResponse> {
 }
 
 pub async fn new_form(State(state): State<AppState>) -> Result<impl IntoResponse> {
-    let scorecards = db::list_scorecards(&state.db).await?;
+    let scorecard_rows = db::list_scorecards(&state.db).await?;
+    let mut scorecards = Vec::new();
+    for sc in scorecard_rows {
+        let last_end = db::last_report_end_date(&state.db, sc.id).await?
+            .map(|d| d.to_string())
+            .unwrap_or_default();
+        scorecards.push(ScorecardWithLastReport {
+            id:                  sc.id,
+            name:                sc.name,
+            default_period_days: sc.default_period_days,
+            last_report_end:     last_end,
+        });
+    }
     render(NewTemplate { scorecards })
 }
 
@@ -321,9 +342,10 @@ pub async fn agent_page(
 
 #[derive(Deserialize)]
 pub struct GenerateForm {
-    pub scorecard_id: u64,
-    pub start_date:   String,
-    pub end_date:     String,
+    pub scorecard_id:        u64,
+    pub label:               Option<String>,
+    pub start_date:          String,
+    pub end_date:            String,
     /// Stored as a plain string so we can handle the empty-string case that
     /// HTML forms submit when a number input is left blank.
     pub accumulation_period: Option<String>,
@@ -348,7 +370,9 @@ pub async fn generate(
             .map_err(|_| AppError::BadRequest("accumulation_period must be a positive integer".into()))?),
     };
 
-    let label = format!("{}_to_{}", start, end);
+    let label = form.label.as_deref().filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("{}_to_{}", start, end));
     let id = db::insert_report(
         &state.db, form.scorecard_id, &label, start, end, accumulation_period,
     ).await?;

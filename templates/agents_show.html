@@ -7,12 +7,14 @@
 <div class="shell">
   <div class="page-header">
     <h1>{{ agent.name }}</h1>
-    <form method="post" action="/agents/{{ agent.id }}/delete"
-          onsubmit="return confirm('Remove {{ agent.name }}?')">
-      <button type="submit" class="btn btn-danger">Remove</button>
-    </form>
+    <div style="display:flex;gap:8px">
+      <a href="/agents" class="btn btn-secondary">← Agents</a>
+      <form method="post" action="/agents/{{ agent.id }}/delete"
+            onsubmit="return confirm('Remove {{ agent.name }}?')">
+        <button type="submit" class="btn btn-danger">Remove</button>
+      </form>
+    </div>
   </div>
-
   <div class="card">
     <div class="card-body">
       <p class="card-title">Details</p>

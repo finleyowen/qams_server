@@ -263,6 +263,7 @@ function recalc() {
     pctEl.className    = 'score-pct is-autofail';
     fillEl.className   = 'fill is-autofail';
     banner.classList.add('visible');
+    document.getElementById('score-hidden').value = '0';
     document.getElementById('adj-score').disabled = false;
     clearAdj();
     return;
