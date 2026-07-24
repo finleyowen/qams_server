@@ -5,7 +5,7 @@
 
 {% block head %}
 <style>
-/* ── Score bar ──────────────────────────────────────── */
+/* ── Score bar ───────────────────────────────────────── */
 .score-bar-card {
   display: flex; align-items: center; gap: 20px;
   background: var(--white); border: 1px solid var(--rule);
@@ -44,7 +44,7 @@
 .adj-reset.visible { display: inline; }
 .adj-reset:hover { color: var(--danger); }
 
-/* ── Autofail banner ────────────────────────────────── */
+/* ── Autofail banner ─────────────────────────────────── */
 .autofail-banner {
   display: none; align-items: center; gap: 8px; padding: 11px 14px;
   background: var(--danger-bg); border: 1px solid #f5c6c6;
@@ -53,50 +53,84 @@
 }
 .autofail-banner.visible { display: flex; }
 
-/* ── Criteria table ─────────────────────────────────── */
-.criteria-table { width: 100%; border-collapse: collapse; }
-.criteria-table thead tr { border-bottom: 2px solid var(--rule); }
-.criteria-table thead th {
-  padding: 10px 12px; font-size: 12px; font-weight: 600;
-  color: var(--ink-mid); text-align: center; white-space: nowrap;
+/* ── Criterion cards ─────────────────────────────────── */
+.criterion-card {
+  background: var(--white); border: 1px solid var(--rule);
+  border-radius: var(--radius); padding: 20px 24px; margin-bottom: 12px;
 }
-.criteria-table thead th.col-crit { text-align: left; min-width: 160px; }
-.criteria-table thead th.col-comment { text-align: left; min-width: 130px; }
-.criteria-table tbody tr { border-bottom: 1px solid var(--rule); }
-.criteria-table tbody tr:last-child { border-bottom: none; }
-.crit-name { padding: 14px 12px; font-size: 14px; vertical-align: top; }
-.crit-name code { font-family: var(--mono); font-size: 13px; }
+.criterion-card.is-answered {
+  border-left: 3px solid var(--accent);
+}
+.criterion-card.is-autofail-selected {
+  border-left: 3px solid var(--danger);
+}
 
-/* ── Option cells ───────────────────────────────────── */
-.opt-cell { padding: 14px 8px; text-align: center; vertical-align: top; }
-.opt-unavailable { color: var(--rule); font-size: 18px; line-height: 36px; }
-.opt-label { display: inline-flex; flex-direction: column; align-items: center; cursor: pointer; }
-.opt-label input[type="radio"] { display: none; }
-.opt-btn {
-  display: flex; align-items: center; justify-content: center;
-  width: 38px; height: 38px; border-radius: var(--radius);
+.criterion-question {
+  font-size: 15px; font-weight: 600; margin-bottom: 14px; color: var(--ink);
+}
+
+/* ── Radio options ───────────────────────────────────── */
+.radio-options { display: flex; flex-direction: column; gap: 8px; }
+
+.radio-option {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 14px; border-radius: var(--radius);
   border: 1.5px solid var(--rule); background: var(--white);
-  font-size: 12px; font-weight: 600; color: var(--ink-mid);
-  transition: background .12s, border-color .12s, color .12s;
+  cursor: pointer; transition: border-color .12s, background .12s;
   user-select: none;
 }
-.opt-label:hover .opt-btn { border-color: #9ca3af; background: var(--surface); }
-.opt-label input:checked + .opt-btn { box-shadow: 0 0 0 3px var(--accent-bg); }
-.opt-full     input:checked + .opt-btn { border-color: var(--success); background: #f0fdf4; color: var(--success); box-shadow: 0 0 0 3px #f0fdf4; }
-.opt-points   input:checked + .opt-btn { border-color: var(--accent);  background: var(--accent-bg);  color: var(--accent);  box-shadow: 0 0 0 3px var(--accent-bg); }
-.opt-na       input:checked + .opt-btn { border-color: #9ca3af; background: #f3f4f6; color: #4b5563; box-shadow: 0 0 0 3px #f3f4f6; }
-.opt-autofail input:checked + .opt-btn { border-color: var(--danger); background: var(--danger-bg); color: var(--danger); box-shadow: 0 0 0 3px var(--danger-bg); }
+.radio-option:hover { border-color: #9ca3af; background: var(--surface); }
 
-/* ── Comment cell ───────────────────────────────────── */
-.comment-cell { padding: 14px 12px 14px 0; vertical-align: top; }
-.comment-toggle {
-  background: none; border: none; cursor: pointer;
-  font-size: 12px; color: var(--ink-soft); padding: 4px 0; transition: color .12s;
+.radio-option input[type="radio"] { display: none; }
+
+.radio-dot {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 2px solid var(--rule); background: var(--white);
+  flex-shrink: 0; transition: border-color .12s, background .12s;
+  display: flex; align-items: center; justify-content: center;
 }
-.comment-toggle:hover { color: var(--accent); }
-.comment-area { margin-top: 6px; }
+.radio-dot::after {
+  content: ''; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--white); display: none;
+}
+
+.radio-option input:checked ~ .radio-dot {
+  border-color: var(--accent); background: var(--accent);
+}
+.radio-option input:checked ~ .radio-dot::after { display: block; }
+
+.radio-label {
+  font-size: 14px; color: var(--ink); flex: 1;
+}
+.radio-meta {
+  font-size: 12px; color: var(--ink-soft);
+}
+
+/* Selected state colouring */
+.radio-option.opt-full input:checked ~ .radio-dot { border-color: var(--success); background: var(--success); }
+.radio-option.opt-full.selected { border-color: var(--success); background: #f0fdf4; }
+.radio-option.opt-full.selected .radio-label { color: var(--success); font-weight: 600; }
+
+.radio-option.opt-autofail input:checked ~ .radio-dot { border-color: var(--danger); background: var(--danger); }
+.radio-option.opt-autofail.selected { border-color: var(--danger); background: var(--danger-bg); }
+.radio-option.opt-autofail.selected .radio-label { color: var(--danger); font-weight: 600; }
+
+.radio-option.opt-na input:checked ~ .radio-dot { border-color: #9ca3af; background: #9ca3af; }
+.radio-option.opt-na.selected { border-color: #9ca3af; background: #f3f4f6; }
+
+.radio-option.opt-points.selected { border-color: var(--accent); background: var(--accent-bg); }
+.radio-option.opt-points.selected .radio-label { color: var(--accent); font-weight: 600; }
+
+/* ── Comment ─────────────────────────────────────────── */
+.comment-section { margin-top: 14px; }
+.comment-toggle {
+  background: none; border: none; cursor: pointer; padding: 0;
+  font-size: 13px; color: var(--ink-soft); transition: color .12s;
+}
+.comment-toggle:hover { color: var(--ink); }
+.comment-area { margin-top: 8px; }
 .comment-area textarea {
-  width: 100%; min-height: 58px; padding: 7px 9px;
+  width: 100%; min-height: 64px; padding: 8px 10px;
   font-family: var(--font); font-size: 13px; color: var(--ink);
   border: 1px solid var(--rule); border-radius: var(--radius);
   resize: vertical; outline: none; transition: border-color .15s;
@@ -118,7 +152,7 @@
     <input type="hidden" name="selections"   id="selections-hidden">
     <input type="hidden" name="comments"     id="comments-hidden">
     <input type="hidden" name="score"        id="score-hidden" value="0">
-    <!-- adj_score submitted only when set, via JS before submit -->
+    <!-- adj_score appended dynamically only when set -->
 
     <!-- Review metadata -->
     <div class="card" style="margin-bottom:20px">
@@ -167,64 +201,62 @@
       ⚠ Autofail — this review scores 0% regardless of other selections.
     </div>
 
-    <!-- Criteria -->
-    <div class="card">
-      <table class="criteria-table">
-        <thead>
-          <tr>
-            <th class="col-crit">Criterion</th>
-            {% for opt_name in option_order %}
-            <th>{{ opt_name }}</th>
-            {% endfor %}
-            <th class="col-comment">Comment</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for criterion in criteria %}
-          <tr>
-            <td class="crit-name"><code>{{ criterion.name }}</code></td>
-            {% for opt in criterion.options %}
-            <td class="opt-cell">
-              {% if opt.available %}
-              <label class="opt-label {{ opt.css_class }}" title="{{ opt.title }}">
-                <input type="radio" name="crit_{{ criterion.uid }}" value="{{ opt.name }}"
-                       data-crit="{{ criterion.name }}" onchange="recalc()">
-                <span class="opt-btn">{{ opt.name }}</span>
-              </label>
-              {% else %}
-              <span class="opt-unavailable" aria-hidden="true">—</span>
-              {% endif %}
-            </td>
-            {% endfor %}
-            <td class="comment-cell">
-              <button type="button" class="comment-toggle"
-                      onclick="toggleComment('{{ criterion.uid }}')"
-                      aria-expanded="false">+ comment</button>
-              <div class="comment-area" id="comment-{{ criterion.uid }}" hidden>
-                <textarea data-crit="{{ criterion.name }}"
-                          placeholder="Optional comment…"></textarea>
-              </div>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+    <!-- Criteria — one card per criterion -->
+    {% for criterion in criteria %}
+    <div class="criterion-card" id="card-{{ criterion.uid }}">
+      <p class="criterion-question">{{ criterion.name }}</p>
+      <div class="radio-options">
+        {% for opt in criterion.options %}
+        {% if opt.available %}
+        <label class="radio-option {{ opt.css_class }}"
+               onclick="onOptionClick(this, '{{ criterion.uid }}')">
+          <input type="radio" name="crit_{{ criterion.uid }}" value="{{ opt.name }}"
+                 data-crit="{{ criterion.name }}" onchange="recalc()">
+          <span class="radio-dot"></span>
+          <span class="radio-label">{{ opt.name }}</span>
+          <span class="radio-meta">{{ opt.title }}</span>
+        </label>
+        {% endif %}
+        {% endfor %}
+      </div>
+      <div class="comment-section">
+        <button type="button" class="comment-toggle"
+                onclick="toggleComment('{{ criterion.uid }}')"
+                aria-expanded="false">+ add comment</button>
+        <div class="comment-area" id="comment-{{ criterion.uid }}" hidden>
+          <textarea data-crit="{{ criterion.name }}"
+                    placeholder="Optional comment…"></textarea>
+        </div>
+      </div>
     </div>
+    {% endfor %}
 
     <div class="form-actions">
       <a href="/reviews" class="btn btn-secondary">Cancel</a>
-      <button type="submit" class="btn btn-primary" id="save-btn">Save review</button>
+      <button type="submit" class="btn btn-primary">Save review</button>
     </div>
   </form>
 </div>
 
 <script>
-// Criteria data for scoring, injected server-side.
 const CRITERIA = {{ criteria_js|safe }};
 
 function maxPts(crit) {
   return Math.max(0, ...Object.values(crit.options)
     .filter(o => o.type === 'points').map(o => o.value));
+}
+
+function onOptionClick(label, uid) {
+  // Update selected styling on sibling options.
+  const options = label.closest('.radio-options').querySelectorAll('.radio-option');
+  options.forEach(o => o.classList.remove('selected'));
+  label.classList.add('selected');
+
+  // Update card border state.
+  const card = document.getElementById('card-' + uid);
+  card.classList.add('is-answered');
+  const isAutofail = label.classList.contains('opt-autofail');
+  card.classList.toggle('is-autofail-selected', isAutofail);
 }
 
 function recalc() {
@@ -304,11 +336,10 @@ function toggleComment(uid) {
   if (open) { area.removeAttribute('hidden'); area.querySelector('textarea').focus(); }
   else       { area.setAttribute('hidden', ''); }
   btn.setAttribute('aria-expanded', open);
-  btn.textContent = open ? '− comment' : '+ comment';
+  btn.textContent = open ? '− comment' : '+ add comment';
 }
 
 document.getElementById('review-form').addEventListener('submit', e => {
-  // Validate all criteria answered
   const unanswered = CRITERIA.filter(c =>
     !document.querySelector(`input[data-crit="${c.name}"]:checked`)
   );
@@ -319,7 +350,6 @@ document.getElementById('review-form').addEventListener('submit', e => {
     return;
   }
 
-  // Serialise selections
   const selections = {};
   for (const crit of CRITERIA) {
     const sel = document.querySelector(`input[data-crit="${crit.name}"]:checked`);
@@ -327,7 +357,6 @@ document.getElementById('review-form').addEventListener('submit', e => {
   }
   document.getElementById('selections-hidden').value = JSON.stringify(selections);
 
-  // Serialise comments
   const comments = {};
   document.querySelectorAll('.comment-area textarea').forEach(ta => {
     const txt = ta.value.trim();
@@ -335,7 +364,6 @@ document.getElementById('review-form').addEventListener('submit', e => {
   });
   document.getElementById('comments-hidden').value = JSON.stringify(comments);
 
-  // adj_score — only append field if a value was entered
   const adjVal = document.getElementById('adj-score').value;
   if (adjVal !== '') {
     const inp = document.createElement('input');
@@ -346,7 +374,6 @@ document.getElementById('review-form').addEventListener('submit', e => {
   }
 });
 
-// Init
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('date').valueAsDate = new Date();
 });
