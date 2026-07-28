@@ -1,8 +1,11 @@
 #![allow(dead_code)]
-use crate::{error::{AppError, Result}, models::*};
+use crate::{
+    error::{AppError, Result},
+    models::*,
+};
+use qams_core::{Criterion, CriterionScore, Scorecard};
 use sqlx::MySqlPool;
 use std::collections::HashMap;
-use qams_core::{Criterion, CriterionScore, Scorecard};
 
 // ── Scorecards ────────────────────────────────────────────────────────────────
 
@@ -10,7 +13,9 @@ pub async fn list_scorecards(db: &MySqlPool) -> Result<Vec<ScorecardRow>> {
     Ok(sqlx::query_as!(
         ScorecardRow,
         "SELECT id, name, default_period_days, created_at FROM scorecards ORDER BY created_at DESC"
-    ).fetch_all(db).await?)
+    )
+    .fetch_all(db)
+    .await?)
 }
 
 pub async fn get_scorecard(db: &MySqlPool, id: u64) -> Result<ScorecardRow> {
@@ -18,29 +23,48 @@ pub async fn get_scorecard(db: &MySqlPool, id: u64) -> Result<ScorecardRow> {
         ScorecardRow,
         "SELECT id, name, default_period_days, created_at FROM scorecards WHERE id = ?",
         id
-    ).fetch_optional(db).await?
+    )
+    .fetch_optional(db)
+    .await?
     .ok_or(AppError::NotFound)
 }
 
-pub async fn insert_scorecard(db: &MySqlPool, name: &str, default_period_days: Option<u32>) -> Result<u64> {
+pub async fn insert_scorecard(
+    db: &MySqlPool,
+    name: &str,
+    default_period_days: Option<u32>,
+) -> Result<u64> {
     let result = sqlx::query!(
         "INSERT INTO scorecards (name, default_period_days) VALUES (?, ?)",
-        name, default_period_days
-    ).execute(db).await?;
+        name,
+        default_period_days
+    )
+    .execute(db)
+    .await?;
     Ok(result.last_insert_id())
 }
 
-pub async fn update_scorecard_name(db: &MySqlPool, id: u64, name: &str, default_period_days: Option<u32>) -> Result<()> {
+pub async fn update_scorecard_name(
+    db: &MySqlPool,
+    id: u64,
+    name: &str,
+    default_period_days: Option<u32>,
+) -> Result<()> {
     sqlx::query!(
         "UPDATE scorecards SET name = ?, default_period_days = ? WHERE id = ?",
-        name, default_period_days, id
-    ).execute(db).await?;
+        name,
+        default_period_days,
+        id
+    )
+    .execute(db)
+    .await?;
     Ok(())
 }
 
 pub async fn delete_scorecard(db: &MySqlPool, id: u64) -> Result<()> {
     sqlx::query!("DELETE FROM scorecards WHERE id = ?", id)
-        .execute(db).await?;
+        .execute(db)
+        .await?;
     Ok(())
 }
 
@@ -52,7 +76,9 @@ pub async fn list_criteria(db: &MySqlPool, scorecard_id: u64) -> Result<Vec<Crit
         "SELECT id, scorecard_id, name, position, created_at
          FROM criteria WHERE scorecard_id = ? ORDER BY position ASC",
         scorecard_id
-    ).fetch_all(db).await?)
+    )
+    .fetch_all(db)
+    .await?)
 }
 
 pub async fn insert_criterion(
@@ -63,14 +89,19 @@ pub async fn insert_criterion(
 ) -> Result<u64> {
     let result = sqlx::query!(
         "INSERT INTO criteria (scorecard_id, name, position) VALUES (?, ?, ?)",
-        scorecard_id, name, position
-    ).execute(db).await?;
+        scorecard_id,
+        name,
+        position
+    )
+    .execute(db)
+    .await?;
     Ok(result.last_insert_id())
 }
 
 pub async fn delete_criteria_for_scorecard(db: &MySqlPool, scorecard_id: u64) -> Result<()> {
     sqlx::query!("DELETE FROM criteria WHERE scorecard_id = ?", scorecard_id)
-        .execute(db).await?;
+        .execute(db)
+        .await?;
     Ok(())
 }
 
@@ -82,7 +113,9 @@ pub async fn list_options(db: &MySqlPool, criterion_id: u64) -> Result<Vec<Crite
         "SELECT id, criterion_id, name, position, score_type, points, created_at
          FROM criterion_options WHERE criterion_id = ? ORDER BY position ASC",
         criterion_id
-    ).fetch_all(db).await?)
+    )
+    .fetch_all(db)
+    .await?)
 }
 
 pub async fn list_options_for_scorecard(
@@ -111,8 +144,14 @@ pub async fn insert_option(
     let result = sqlx::query!(
         "INSERT INTO criterion_options (criterion_id, name, position, score_type, points)
          VALUES (?, ?, ?, ?, ?)",
-        criterion_id, name, position, score_type, points
-    ).execute(db).await?;
+        criterion_id,
+        name,
+        position,
+        score_type,
+        points
+    )
+    .execute(db)
+    .await?;
     Ok(result.last_insert_id())
 }
 
@@ -123,12 +162,15 @@ pub async fn insert_option(
 /// assembles the core type in memory.
 pub async fn load_scorecard_core(db: &MySqlPool, scorecard_id: u64) -> Result<Scorecard> {
     let criterion_rows = list_criteria(db, scorecard_id).await?;
-    let option_rows    = list_options_for_scorecard(db, scorecard_id).await?;
+    let option_rows = list_options_for_scorecard(db, scorecard_id).await?;
 
     // Group options by criterion_id.
     let mut options_by_criterion: HashMap<u64, Vec<&CriterionOptionRow>> = HashMap::new();
     for opt in &option_rows {
-        options_by_criterion.entry(opt.criterion_id).or_default().push(opt);
+        options_by_criterion
+            .entry(opt.criterion_id)
+            .or_default()
+            .push(opt);
     }
 
     // Derive the global option order from the first criterion that has all
@@ -150,14 +192,16 @@ pub async fn load_scorecard_core(db: &MySqlPool, scorecard_id: u64) -> Result<Sc
         let options: HashMap<String, CriterionScore> = options_by_criterion
             .get(&crit_row.id)
             .map(|opts| {
-                opts.iter().map(|opt| {
-                    let score = match opt.score_type.as_str() {
-                        "na"       => CriterionScore::NotApplicable,
-                        "autofail" => CriterionScore::Autofail,
-                        _          => CriterionScore::Points(opt.points.unwrap_or(0)),
-                    };
-                    (opt.name.clone(), score)
-                }).collect()
+                opts.iter()
+                    .map(|opt| {
+                        let score = match opt.score_type.as_str() {
+                            "na" => CriterionScore::NotApplicable,
+                            "autofail" => CriterionScore::Autofail,
+                            _ => CriterionScore::Points(opt.points.unwrap_or(0)),
+                        };
+                        (opt.name.clone(), score)
+                    })
+                    .collect()
             })
             .unwrap_or_default();
 
@@ -174,7 +218,9 @@ pub async fn list_agents(db: &MySqlPool) -> Result<Vec<AgentRow>> {
         AgentRow,
         r#"SELECT id, name, metadata AS "metadata: sqlx::types::Json<serde_json::Value>", created_at
            FROM agents ORDER BY name ASC"#
-    ).fetch_all(db).await?)
+    )
+    .fetch_all(db)
+    .await?)
 }
 
 pub async fn get_agent(db: &MySqlPool, id: u64) -> Result<AgentRow> {
@@ -183,21 +229,27 @@ pub async fn get_agent(db: &MySqlPool, id: u64) -> Result<AgentRow> {
         r#"SELECT id, name, metadata AS "metadata: sqlx::types::Json<serde_json::Value>", created_at
            FROM agents WHERE id = ?"#,
         id
-    ).fetch_optional(db).await?
+    )
+    .fetch_optional(db)
+    .await?
     .ok_or(AppError::NotFound)
 }
 
 pub async fn insert_agent(db: &MySqlPool, name: &str, metadata: &serde_json::Value) -> Result<u64> {
     let result = sqlx::query!(
         "INSERT INTO agents (name, metadata) VALUES (?, ?)",
-        name, serde_json::to_string(metadata).unwrap_or_default()
-    ).execute(db).await?;
+        name,
+        serde_json::to_string(metadata).unwrap_or_default()
+    )
+    .execute(db)
+    .await?;
     Ok(result.last_insert_id())
 }
 
 pub async fn delete_agent(db: &MySqlPool, id: u64) -> Result<()> {
     sqlx::query!("DELETE FROM agents WHERE id = ?", id)
-        .execute(db).await?;
+        .execute(db)
+        .await?;
     Ok(())
 }
 
@@ -219,8 +271,12 @@ pub async fn list_reviews_in_range(
            FROM reviews
            WHERE scorecard_id = ? AND date BETWEEN ? AND ?
            ORDER BY date ASC"#,
-        scorecard_id, start_date, end_date
-    ).fetch_all(db).await?)
+        scorecard_id,
+        start_date,
+        end_date
+    )
+    .fetch_all(db)
+    .await?)
 }
 
 pub async fn get_review(db: &MySqlPool, id: u64) -> Result<ReviewRow> {
@@ -233,7 +289,9 @@ pub async fn get_review(db: &MySqlPool, id: u64) -> Result<ReviewRow> {
             score, adj_score, created_at
            FROM reviews WHERE id = ?"#,
         id
-    ).fetch_optional(db).await?
+    )
+    .fetch_optional(db)
+    .await?
     .ok_or(AppError::NotFound)
 }
 
@@ -266,7 +324,9 @@ pub async fn list_reports(db: &MySqlPool) -> Result<Vec<ReportRow>> {
         ReportRow,
         "SELECT id, scorecard_id, label, start_date, end_date, accumulation_period, created_at
          FROM reports ORDER BY start_date DESC"
-    ).fetch_all(db).await?)
+    )
+    .fetch_all(db)
+    .await?)
 }
 
 pub async fn get_report(db: &MySqlPool, id: u64) -> Result<ReportRow> {
@@ -275,7 +335,9 @@ pub async fn get_report(db: &MySqlPool, id: u64) -> Result<ReportRow> {
         "SELECT id, scorecard_id, label, start_date, end_date, accumulation_period, created_at
          FROM reports WHERE id = ?",
         id
-    ).fetch_optional(db).await?
+    )
+    .fetch_optional(db)
+    .await?
     .ok_or(AppError::NotFound)
 }
 
@@ -292,8 +354,12 @@ pub async fn previous_reports(
          WHERE scorecard_id = ? AND start_date < ?
          ORDER BY start_date DESC
          LIMIT ?",
-        scorecard_id, before_start_date, limit
-    ).fetch_all(db).await?)
+        scorecard_id,
+        before_start_date,
+        limit
+    )
+    .fetch_all(db)
+    .await?)
 }
 
 pub async fn insert_report(
@@ -320,8 +386,11 @@ pub async fn count_previous_reports(
 ) -> Result<u32> {
     let row = sqlx::query!(
         "SELECT COUNT(*) as count FROM reports WHERE scorecard_id = ? AND start_date < ?",
-        scorecard_id, before_start_date
-    ).fetch_one(db).await?;
+        scorecard_id,
+        before_start_date
+    )
+    .fetch_one(db)
+    .await?;
     Ok(row.count as u32)
 }
 
@@ -334,6 +403,8 @@ pub async fn last_report_end_date(
     let row = sqlx::query!(
         "SELECT end_date FROM reports WHERE scorecard_id = ? ORDER BY end_date DESC LIMIT 1",
         scorecard_id
-    ).fetch_optional(db).await?;
+    )
+    .fetch_optional(db)
+    .await?;
     Ok(row.map(|r| r.end_date))
 }

@@ -12,6 +12,8 @@ use std::net::SocketAddr;
 use tower_http::trace::TraceLayer;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
+// const SCHEMA_SQL: &str = include_str!("../schema.sql");
+
 /// Shared application state threaded through every handler via Axum's
 /// `State` extractor.
 #[derive(Clone)]
@@ -26,26 +28,21 @@ async fn main() {
 
     // Tracing
     tracing_subscriber::registry()
-        .with(tracing_subscriber::EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| "qams_server=debug,tower_http=debug".into()))
+        .with(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "qams_server=debug,tower_http=debug".into()),
+        )
         .with(tracing_subscriber::fmt::layer())
         .init();
 
     // Database
-    let database_url = std::env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
 
     let pool = MySqlPoolOptions::new()
         .max_connections(20)
         .connect(&database_url)
         .await
         .expect("Failed to connect to database");
-
-    // Run migrations
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await
-        .expect("Failed to run migrations");
 
     let state = AppState { db: pool };
 
@@ -63,38 +60,51 @@ async fn main() {
 pub fn router(state: AppState) -> Router {
     Router::new()
         // ── Scorecards ────────────────────────────────────────────────────
-        .route("/scorecards",              get(handlers::scorecards::list)
-                                          .post(handlers::scorecards::create))
-        .route("/scorecards/new",          get(handlers::scorecards::new_form))
-        .route("/scorecards/{id}",         get(handlers::scorecards::show))
-        .route("/scorecards/{id}/edit",    get(handlers::scorecards::edit_form)
-                                          .post(handlers::scorecards::update))
-        .route("/scorecards/{id}/delete",  post(handlers::scorecards::delete))
-
+        .route(
+            "/scorecards",
+            get(handlers::scorecards::list).post(handlers::scorecards::create),
+        )
+        .route("/scorecards/new", get(handlers::scorecards::new_form))
+        .route("/scorecards/{id}", get(handlers::scorecards::show))
+        .route(
+            "/scorecards/{id}/edit",
+            get(handlers::scorecards::edit_form).post(handlers::scorecards::update),
+        )
+        .route(
+            "/scorecards/{id}/delete",
+            post(handlers::scorecards::delete),
+        )
         // ── Agents ────────────────────────────────────────────────────────
-        .route("/agents",                  get(handlers::agents::list)
-                                          .post(handlers::agents::create))
-        .route("/agents/new",               get(handlers::agents::new_form))
-        .route("/agents/{id}",             get(handlers::agents::show))
-        .route("/agents/{id}/delete",      post(handlers::agents::delete))
-
+        .route(
+            "/agents",
+            get(handlers::agents::list).post(handlers::agents::create),
+        )
+        .route("/agents/new", get(handlers::agents::new_form))
+        .route("/agents/{id}", get(handlers::agents::show))
+        .route("/agents/{id}/delete", post(handlers::agents::delete))
         // ── Reviews ───────────────────────────────────────────────────────
         // GET /reviews renders a blank review form for a given scorecard.
         // POST /reviews submits a completed review.
-        .route("/reviews",                 get(handlers::reviews::index)
-                                          .post(handlers::reviews::submit))
-        .route("/reviews/form",             get(handlers::reviews::form))
-        .route("/reviews/{id}",            get(handlers::reviews::show))
-
+        .route(
+            "/reviews",
+            get(handlers::reviews::index).post(handlers::reviews::submit),
+        )
+        .route("/reviews/form", get(handlers::reviews::form))
+        .route("/reviews/{id}", get(handlers::reviews::show))
         // ── Reports ───────────────────────────────────────────────────────
-        .route("/reports",                 get(handlers::reports::list)
-                                          .post(handlers::reports::generate))
-        .route("/reports/new",              get(handlers::reports::new_form))
-        .route("/reports/{id}",            get(handlers::reports::show))
-        .route("/reports/{id}/summary",    get(handlers::reports::summary))
-        .route("/reports/{id}/agents",     get(handlers::reports::agent_index))
-        .route("/reports/{id}/agents/{agent_id}", get(handlers::reports::agent_page))
-
+        .route(
+            "/reports",
+            get(handlers::reports::list).post(handlers::reports::generate),
+        )
+        .route("/reports/new", get(handlers::reports::new_form))
+        .route("/reports/{id}", get(handlers::reports::show))
+        .route("/reports/{id}/export", get(handlers::reports::export))
+        .route("/reports/{id}/summary", get(handlers::reports::summary))
+        .route("/reports/{id}/agents", get(handlers::reports::agent_index))
+        .route(
+            "/reports/{id}/agents/{agent_id}",
+            get(handlers::reports::agent_page),
+        )
         // ── State + middleware ────────────────────────────────────────────
         .with_state(state)
         .layer(TraceLayer::new_for_http())

@@ -1,30 +1,34 @@
 #![allow(dead_code)]
 use askama::Template;
 use axum::{
+    Form,
     extract::{Path, State},
     response::{Html, IntoResponse},
-    Form,
 };
 use serde::Deserialize;
 
-use crate::{db, error::{AppError, Result}, models::{CriterionOptionRow, ScorecardRow}, AppState};
+use crate::{
+    AppState, db,
+    error::{AppError, Result},
+    models::{CriterionOptionRow, ScorecardRow},
+};
 
 // ── Template types ────────────────────────────────────────────────────────────
 
 /// Scorecard enriched with its criterion count for the list view.
 pub struct ScorecardSummary {
-    pub id:                  u64,
-    pub name:                String,
-    pub criterion_count:     usize,
-    pub created_at:          chrono::NaiveDateTime,
+    pub id: u64,
+    pub name: String,
+    pub criterion_count: usize,
+    pub created_at: chrono::NaiveDateTime,
 }
 
 /// Criterion enriched with its options for the show/edit views.
 pub struct CriterionWithOptions {
-    pub id:       u64,
-    pub name:     String,
+    pub id: u64,
+    pub name: String,
     pub position: u32,
-    pub options:  Vec<CriterionOptionRow>,
+    pub options: Vec<CriterionOptionRow>,
 }
 
 #[derive(Template)]
@@ -37,16 +41,16 @@ struct ListTemplate {
 #[template(path = "scorecards_show.html")]
 struct ShowTemplate {
     scorecard: ScorecardRow,
-    criteria:  Vec<CriterionWithOptions>,
+    criteria: Vec<CriterionWithOptions>,
 }
 
 #[derive(Template)]
 #[template(path = "scorecards_edit.html")]
 struct EditTemplate {
-    is_edit:                bool,
-    scorecard_id:           u64,
-    scorecard_name:         String,
-    default_period_days:    String,
+    is_edit: bool,
+    scorecard_id: u64,
+    scorecard_name: String,
+    default_period_days: String,
     /// JSON array of criteria for the JS builder's `existingData`.
     existing_criteria_json: String,
 }
@@ -69,8 +73,8 @@ pub async fn list(State(state): State<AppState>) -> Result<impl IntoResponse> {
         let criteria = db::list_criteria(&state.db, sc.id).await?;
         scorecards.push(ScorecardSummary {
             criterion_count: criteria.len(),
-            id:         sc.id,
-            name:       sc.name,
+            id: sc.id,
+            name: sc.name,
             created_at: sc.created_at,
         });
     }
@@ -78,33 +82,33 @@ pub async fn list(State(state): State<AppState>) -> Result<impl IntoResponse> {
     render(ListTemplate { scorecards })
 }
 
-pub async fn show(
-    State(state): State<AppState>,
-    Path(id): Path<u64>,
-) -> Result<impl IntoResponse> {
-    let scorecard      = db::get_scorecard(&state.db, id).await?;
+pub async fn show(State(state): State<AppState>, Path(id): Path<u64>) -> Result<impl IntoResponse> {
+    let scorecard = db::get_scorecard(&state.db, id).await?;
     let criterion_rows = db::list_criteria(&state.db, id).await?;
 
     let mut criteria: Vec<CriterionWithOptions> = Vec::new();
     for crit in criterion_rows {
         let options = db::list_options(&state.db, crit.id).await?;
         criteria.push(CriterionWithOptions {
-            id:       crit.id,
-            name:     crit.name,
+            id: crit.id,
+            name: crit.name,
             position: crit.position,
             options,
         });
     }
 
-    render(ShowTemplate { scorecard, criteria })
+    render(ShowTemplate {
+        scorecard,
+        criteria,
+    })
 }
 
 pub async fn new_form(State(_state): State<AppState>) -> Result<impl IntoResponse> {
     render(EditTemplate {
-        is_edit:                false,
-        scorecard_id:           0,
-        scorecard_name:         String::new(),
-        default_period_days:    String::new(),
+        is_edit: false,
+        scorecard_id: 0,
+        scorecard_name: String::new(),
+        default_period_days: String::new(),
         existing_criteria_json: "[]".to_string(),
     })
 }
@@ -113,19 +117,22 @@ pub async fn edit_form(
     State(state): State<AppState>,
     Path(id): Path<u64>,
 ) -> Result<impl IntoResponse> {
-    let scorecard      = db::get_scorecard(&state.db, id).await?;
+    let scorecard = db::get_scorecard(&state.db, id).await?;
     let criterion_rows = db::list_criteria(&state.db, id).await?;
 
     let mut criteria_json = Vec::new();
     for crit in &criterion_rows {
         let options = db::list_options(&state.db, crit.id).await?;
-        let options_json: Vec<serde_json::Value> = options.iter().map(|opt| {
-            serde_json::json!({
-                "name":       opt.name,
-                "score_type": opt.score_type,
-                "points":     opt.points,
+        let options_json: Vec<serde_json::Value> = options
+            .iter()
+            .map(|opt| {
+                serde_json::json!({
+                    "name":       opt.name,
+                    "score_type": opt.score_type,
+                    "points":     opt.points,
+                })
             })
-        }).collect();
+            .collect();
         criteria_json.push(serde_json::json!({
             "name":    crit.name,
             "options": options_json,
@@ -133,11 +140,15 @@ pub async fn edit_form(
     }
 
     render(EditTemplate {
-        is_edit:                true,
-        scorecard_id:           id,
-        scorecard_name:         scorecard.name,
-        default_period_days:    scorecard.default_period_days.map(|d| d.to_string()).unwrap_or_default(),
-        existing_criteria_json: serde_json::to_string(&criteria_json).unwrap_or_else(|_| "[]".into()),
+        is_edit: true,
+        scorecard_id: id,
+        scorecard_name: scorecard.name,
+        default_period_days: scorecard
+            .default_period_days
+            .map(|d| d.to_string())
+            .unwrap_or_default(),
+        existing_criteria_json: serde_json::to_string(&criteria_json)
+            .unwrap_or_else(|_| "[]".into()),
     })
 }
 
@@ -145,26 +156,28 @@ pub async fn edit_form(
 
 #[derive(Deserialize)]
 pub struct ScorecardForm {
-    pub name:                String,
-    pub criteria_json:       String,
+    pub name: String,
+    pub criteria_json: String,
     pub default_period_days: Option<String>,
 }
 
 fn parse_period_days(s: &Option<String>) -> Option<u32> {
-    s.as_deref().filter(|s| !s.is_empty()).and_then(|s| s.parse().ok())
+    s.as_deref()
+        .filter(|s| !s.is_empty())
+        .and_then(|s| s.parse().ok())
 }
 
 #[derive(Deserialize)]
 struct CriterionInput {
-    name:    String,
+    name: String,
     options: Vec<OptionInput>,
 }
 
 #[derive(Deserialize)]
 struct OptionInput {
-    name:       String,
+    name: String,
     score_type: String,
-    points:     Option<u32>,
+    points: Option<u32>,
 }
 
 // ── Create ────────────────────────────────────────────────────────────────────
@@ -175,8 +188,11 @@ pub async fn create(
 ) -> Result<impl IntoResponse> {
     let criteria = parse_and_validate_criteria(&form.criteria_json)?;
     let period_days = parse_period_days(&form.default_period_days);
-    let scorecard_id = insert_scorecard_with_criteria(&state, &form.name, period_days, &criteria).await?;
-    Ok(axum::response::Redirect::to(&format!("/scorecards/{scorecard_id}")))
+    let scorecard_id =
+        insert_scorecard_with_criteria(&state, &form.name, period_days, &criteria).await?;
+    Ok(axum::response::Redirect::to(&format!(
+        "/scorecards/{scorecard_id}"
+    )))
 }
 
 // ── Update ────────────────────────────────────────────────────────────────────
@@ -193,25 +209,43 @@ pub async fn update(
     let mut tx = state.db.begin().await?;
 
     let period_days = parse_period_days(&form.default_period_days);
-    sqlx::query!("UPDATE scorecards SET name = ?, default_period_days = ? WHERE id = ?", form.name, period_days, id)
-        .execute(&mut *tx).await?;
+    sqlx::query!(
+        "UPDATE scorecards SET name = ?, default_period_days = ? WHERE id = ?",
+        form.name,
+        period_days,
+        id
+    )
+    .execute(&mut *tx)
+    .await?;
 
     // Replace all criteria+options atomically; CASCADE handles criterion_options.
     sqlx::query!("DELETE FROM criteria WHERE scorecard_id = ?", id)
-        .execute(&mut *tx).await?;
+        .execute(&mut *tx)
+        .await?;
 
     for (crit_pos, crit) in criteria.iter().enumerate() {
         let criterion_id = sqlx::query!(
             "INSERT INTO criteria (scorecard_id, name, position) VALUES (?, ?, ?)",
-            id, crit.name, crit_pos as u32
-        ).execute(&mut *tx).await?.last_insert_id();
+            id,
+            crit.name,
+            crit_pos as u32
+        )
+        .execute(&mut *tx)
+        .await?
+        .last_insert_id();
 
         for (opt_pos, opt) in crit.options.iter().enumerate() {
             sqlx::query!(
                 "INSERT INTO criterion_options (criterion_id, name, position, score_type, points)
                  VALUES (?, ?, ?, ?, ?)",
-                criterion_id, opt.name, opt_pos as u32, opt.score_type, opt.points
-            ).execute(&mut *tx).await?;
+                criterion_id,
+                opt.name,
+                opt_pos as u32,
+                opt.score_type,
+                opt.points
+            )
+            .execute(&mut *tx)
+            .await?;
         }
     }
 
@@ -236,26 +270,33 @@ fn parse_and_validate_criteria(criteria_json: &str) -> Result<Vec<CriterionInput
         .map_err(|e| AppError::BadRequest(format!("Invalid criteria JSON: {e}")))?;
 
     if criteria.is_empty() {
-        return Err(AppError::BadRequest("Scorecard must have at least one criterion".into()));
+        return Err(AppError::BadRequest(
+            "Scorecard must have at least one criterion".into(),
+        ));
     }
 
     for crit in &criteria {
         if crit.name.trim().is_empty() {
-            return Err(AppError::BadRequest("Criterion name cannot be empty".into()));
+            return Err(AppError::BadRequest(
+                "Criterion name cannot be empty".into(),
+            ));
         }
         for opt in &crit.options {
             match opt.score_type.as_str() {
                 "points" => {
                     if opt.points.is_none() {
                         return Err(AppError::BadRequest(format!(
-                            "Option '{}' has score_type 'points' but no points value", opt.name
+                            "Option '{}' has score_type 'points' but no points value",
+                            opt.name
                         )));
                     }
                 }
                 "na" | "autofail" => {}
-                other => return Err(AppError::BadRequest(format!(
-                    "Unknown score_type '{other}'; expected 'points', 'na', or 'autofail'"
-                ))),
+                other => {
+                    return Err(AppError::BadRequest(format!(
+                        "Unknown score_type '{other}'; expected 'points', 'na', or 'autofail'"
+                    )));
+                }
             }
         }
     }
@@ -272,21 +313,37 @@ async fn insert_scorecard_with_criteria(
     let mut tx = state.db.begin().await?;
 
     let scorecard_id = sqlx::query!(
-        "INSERT INTO scorecards (name, default_period_days) VALUES (?, ?)", name, default_period_days
-    ).execute(&mut *tx).await?.last_insert_id();
+        "INSERT INTO scorecards (name, default_period_days) VALUES (?, ?)",
+        name,
+        default_period_days
+    )
+    .execute(&mut *tx)
+    .await?
+    .last_insert_id();
 
     for (crit_pos, crit) in criteria.iter().enumerate() {
         let criterion_id = sqlx::query!(
             "INSERT INTO criteria (scorecard_id, name, position) VALUES (?, ?, ?)",
-            scorecard_id, crit.name, crit_pos as u32
-        ).execute(&mut *tx).await?.last_insert_id();
+            scorecard_id,
+            crit.name,
+            crit_pos as u32
+        )
+        .execute(&mut *tx)
+        .await?
+        .last_insert_id();
 
         for (opt_pos, opt) in crit.options.iter().enumerate() {
             sqlx::query!(
                 "INSERT INTO criterion_options (criterion_id, name, position, score_type, points)
                  VALUES (?, ?, ?, ?, ?)",
-                criterion_id, opt.name, opt_pos as u32, opt.score_type, opt.points
-            ).execute(&mut *tx).await?;
+                criterion_id,
+                opt.name,
+                opt_pos as u32,
+                opt.score_type,
+                opt.points
+            )
+            .execute(&mut *tx)
+            .await?;
         }
     }
 

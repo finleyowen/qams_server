@@ -1,12 +1,16 @@
 use askama::Template;
 use axum::{
+    Form,
     extract::{Path, State},
     response::{Html, IntoResponse},
-    Form,
 };
 use serde::Deserialize;
 
-use crate::{db, error::{AppError, Result}, models::AgentRow, AppState};
+use crate::{
+    AppState, db,
+    error::{AppError, Result},
+    models::AgentRow,
+};
 
 // ── Templates ─────────────────────────────────────────────────────────────────
 
@@ -23,7 +27,7 @@ struct NewTemplate;
 #[derive(Template)]
 #[template(path = "agents_show.html")]
 struct ShowTemplate {
-    agent:          AgentRow,
+    agent: AgentRow,
     metadata_pairs: Vec<(String, String)>,
 }
 
@@ -44,14 +48,13 @@ pub async fn new_form(State(_state): State<AppState>) -> Result<impl IntoRespons
     render(NewTemplate)
 }
 
-pub async fn show(
-    State(state): State<AppState>,
-    Path(id): Path<u64>,
-) -> Result<impl IntoResponse> {
+pub async fn show(State(state): State<AppState>, Path(id): Path<u64>) -> Result<impl IntoResponse> {
     let agent = db::get_agent(&state.db, id).await?;
 
     // Flatten the JSON metadata object into sorted (key, value) pairs.
-    let metadata_pairs: Vec<(String, String)> = agent.metadata.0
+    let metadata_pairs: Vec<(String, String)> = agent
+        .metadata
+        .0
         .as_object()
         .map(|obj| {
             let mut pairs: Vec<(String, String)> = obj
@@ -63,12 +66,15 @@ pub async fn show(
         })
         .unwrap_or_default();
 
-    render(ShowTemplate { agent, metadata_pairs })
+    render(ShowTemplate {
+        agent,
+        metadata_pairs,
+    })
 }
 
 #[derive(Deserialize)]
 pub struct CreateForm {
-    pub name:     String,
+    pub name: String,
     pub metadata: Option<String>,
 }
 
@@ -79,7 +85,8 @@ pub async fn create(
     if form.name.trim().is_empty() {
         return Err(AppError::BadRequest("Agent name cannot be empty".into()));
     }
-    let metadata = form.metadata
+    let metadata = form
+        .metadata
         .as_deref()
         .and_then(|s| serde_json::from_str(s).ok())
         .unwrap_or(serde_json::Value::Object(Default::default()));

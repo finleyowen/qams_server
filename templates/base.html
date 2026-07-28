@@ -115,6 +115,30 @@ select.form-control { appearance: none;
 .empty-state p { margin-bottom: 16px; }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
+
+@media print {
+  /* Hide chrome */
+  .site-nav, .btn, .page-header .btn, .form-actions, .pdf-btn { display: none !important; }
+
+  /* Reset backgrounds so colour-coded cells print */
+  * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+
+  body { background: #fff; font-size: 12px; }
+  .shell { max-width: 100%; margin: 0; padding: 0; }
+
+  /* Keep cards readable */
+  .card { border: 1px solid #e0ddd8; border-radius: 0; box-shadow: none; margin-bottom: 12px; }
+  .card-body { padding: 12px; }
+
+  /* Tables */
+  .report-table th, .report-table td { padding: 7px 10px; font-size: 11px; }
+
+  /* Don't break rows across pages */
+  tr { page-break-inside: avoid; }
+
+  /* Page title from the <title> element */
+  @page { margin: 1.5cm; }
+}
 </style>
 {% block head %}{% endblock %}
 </head>

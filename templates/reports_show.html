@@ -7,9 +7,11 @@
 <div class="shell">
   <div class="page-header">
     <h1>{{ report_label }}</h1>
-    <a href="/reports" class="btn btn-secondary">← All reports</a>
+    <div style="display:flex;gap:10px;align-items:center">
+      <a href="/reports/{{ report_id }}/export" class="btn btn-primary">Export Excel</a>
+      <a href="/reports" class="btn btn-secondary">← All reports</a>
+    </div>
   </div>
-
   <div class="card">
     <div class="card-body">
       <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:18px;margin-bottom:24px">
