@@ -95,6 +95,35 @@
 }
 .add-criterion-btn:hover { border-color: var(--accent); color: var(--accent); }
 
+/* Grades */
+.grades-table { width: 100%; border-collapse: collapse; }
+.grades-table th {
+  padding: 8px 12px; font-size: 11px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: .06em;
+  color: var(--ink-soft); border-bottom: 1px solid var(--rule); text-align: left;
+}
+.grades-table td { padding: 8px 12px; border-bottom: 1px solid var(--rule); vertical-align: middle; }
+.grades-table tbody tr:last-child td { border-bottom: none; }
+.grades-table input[type="text"], .grades-table input[type="number"] {
+  width: 100%; padding: 5px 8px; font-family: var(--font); font-size: 13px;
+  border: 1px solid var(--rule); border-radius: 4px; outline: none;
+  background: var(--white); color: var(--ink);
+}
+.grades-table input:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-bg); }
+.grades-table input[type="number"] { text-align: right; }
+.grades-table input[type="color"] {
+  width: 44px; height: 30px; padding: 2px; cursor: pointer;
+  border: 1px solid var(--rule); border-radius: 4px; background: var(--white);
+}
+.grade-chip {
+  display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px;
+  border-radius: 999px; font-size: 12px; font-weight: 600; white-space: nowrap;
+  border: 1px solid rgba(0,0,0,.06);
+}
+.grade-chip .min { font-weight: 400; opacity: .8; }
+.grades-empty { padding: 14px 16px; font-size: 13px; color: var(--ink-soft); }
+.section-hint { font-size: 13px; color: var(--ink-soft); margin: -4px 0 10px; }
+
 /* Dragging state */
 .criterion-card.dragging { opacity: .4; }
 .criterion-card.drag-over { border-color: var(--accent); }
@@ -131,6 +160,28 @@
       </div>
     </div>
 
+    <p class="card-title" style="margin-bottom:10px">Grades</p>
+    <p class="section-hint">Reports colour each score using the grade with the highest minimum it reaches.</p>
+    <div class="criterion-card" style="margin-bottom:28px">
+      <table class="grades-table">
+        <thead>
+          <tr>
+            <th style="width:170px">Preview</th>
+            <th>Name</th>
+            <th style="width:110px">Minimum %</th>
+            <th style="width:64px">Fill</th>
+            <th style="width:64px">Text</th>
+            <th style="width:36px"></th>
+          </tr>
+        </thead>
+        <tbody id="grades-body"></tbody>
+      </table>
+      <div class="grades-empty" id="grades-empty">No grades yet — reports will use the default colours.</div>
+      <div class="criterion-footer" style="border-top:1px solid var(--rule)">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="addGrade()">+ Add grade</button>
+      </div>
+    </div>
+
     <p class="card-title" style="margin-bottom:10px">Criteria</p>
     <div class="builder" id="criteria-builder">
       <!-- Populated by JS from existingData below -->
@@ -142,6 +193,7 @@
 
     <!-- Hidden field carrying the serialised scorecard structure -->
     <input type="hidden" name="criteria_json" id="criteria-json">
+    <input type="hidden" name="grades_json" id="grades-json">
 
     <div class="form-actions">
       <a href="/scorecards" class="btn btn-secondary">Cancel</a>
@@ -155,7 +207,8 @@
 <script>
 // ── Existing data (injected by Askama) ───────────────────────────────────────
 // On create this is []; on edit it's the full criteria array.
-const existingData = {{ existing_criteria_json }};
+const existingData   = {{ existing_criteria_json|safe }};
+const existingGrades = {{ existing_grades_json|safe }};
 
 // ── State ────────────────────────────────────────────────────────────────────
 let criteria = existingData.length > 0 ? existingData : [];
@@ -313,8 +366,85 @@ function onTypeChange(select, ci, oi) {
   if (type === 'points') ptsInput.focus();
 }
 
+// ── Grades ───────────────────────────────────────────────────────────────────
+let grades = existingGrades.slice().sort((a, b) => a.min_score - b.min_score);
+
+function renderGrades() {
+  const body = document.getElementById('grades-body');
+  body.innerHTML = '';
+  grades.forEach((g, gi) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td><span class="grade-chip"></span></td>
+      <td><input type="text" placeholder="e.g. Exceeds" value="${esc(g.name)}" data-field="name"></td>
+      <td><input type="number" min="0" max="100" step="any" placeholder="80"
+                 value="${g.min_score ?? ''}" data-field="min_score"></td>
+      <td><input type="color" value="${esc(g.bg_color)}" data-field="bg_color" title="Background colour"></td>
+      <td><input type="color" value="${esc(g.text_color)}" data-field="text_color" title="Text colour"></td>
+      <td><button type="button" class="del-btn" title="Remove grade" onclick="removeGrade(${gi})">✕</button></td>
+    `;
+    tr.addEventListener('input', e => {
+      const field = e.target.dataset.field;
+      if (!field) return;
+      g[field] = field === 'min_score'
+        ? (e.target.value === '' ? null : parseFloat(e.target.value))
+        : e.target.value;
+      paintChip(tr.querySelector('.grade-chip'), g);
+    });
+    paintChip(tr.querySelector('.grade-chip'), g);
+    body.appendChild(tr);
+  });
+  document.getElementById('grades-empty').style.display = grades.length ? 'none' : '';
+}
+
+function paintChip(chip, g) {
+  chip.style.background = g.bg_color;
+  chip.style.color = g.text_color;
+  chip.textContent = (g.name || '').trim() || 'Grade';
+  if (g.min_score != null && !Number.isNaN(g.min_score)) {
+    const min = document.createElement('span');
+    min.className = 'min';
+    min.textContent = '≥ ' + g.min_score + '%';
+    chip.append(' ', min);
+  }
+}
+
+function addGrade() {
+  grades.push({ name: '', min_score: null, bg_color: '#dcfce7', text_color: '#166534' });
+  renderGrades();
+  const rows = document.querySelectorAll('#grades-body tr');
+  rows[rows.length - 1]?.querySelector('input[type="text"]')?.focus();
+}
+
+function removeGrade(gi) {
+  grades.splice(gi, 1);
+  renderGrades();
+}
+
+/** Returns an error message for the first invalid grade, or null. */
+function gradesError() {
+  const names = new Set(), mins = new Set();
+  for (const g of grades) {
+    const name = (g.name || '').trim();
+    if (!name) return 'All grades must have a name.';
+    if (g.min_score == null || Number.isNaN(g.min_score) || g.min_score < 0 || g.min_score > 100)
+      return `Grade "${name}" needs a minimum score between 0 and 100.`;
+    if (names.has(name.toLowerCase())) return `There are two grades named "${name}".`;
+    if (mins.has(g.min_score)) return `Two grades start at ${g.min_score}%.`;
+    names.add(name.toLowerCase());
+    mins.add(g.min_score);
+  }
+  return null;
+}
+
 // ── Serialise on submit ──────────────────────────────────────────────────────
 document.getElementById('scorecard-form').addEventListener('submit', e => {
+  const gradeErr = gradesError();
+  if (gradeErr) {
+    e.preventDefault();
+    alert(gradeErr);
+    return;
+  }
   // Basic validation
   for (const crit of criteria) {
     if (!crit.name.trim()) {
@@ -336,6 +466,9 @@ document.getElementById('scorecard-form').addEventListener('submit', e => {
     }
   }
   document.getElementById('criteria-json').value = JSON.stringify(criteria);
+  document.getElementById('grades-json').value = JSON.stringify(
+    grades.map(g => ({ ...g, name: g.name.trim() }))
+  );
 });
 
 document.getElementById('add-criterion-btn').addEventListener('click', addCriterion);
@@ -347,6 +480,7 @@ function esc(s) {
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 render();
+renderGrades();
 if (criteria.length === 0) addCriterion();
 </script>
 {% endblock %}

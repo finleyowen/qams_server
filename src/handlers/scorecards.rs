@@ -49,10 +49,24 @@ struct EditTemplate {
     scorecard_name:         String,
     default_period_days:    String,
     /// JSON array of criteria for the JS builder's `existingData`.
+    /// Script-safe (see `script_json`); rendered with `|safe`.
     existing_criteria_json: String,
+    /// JSON array of grades for the JS builder. Script-safe, rendered with `|safe`.
+    existing_grades_json:   String,
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/// Serialises a value as JSON that is safe to embed in an inline `<script>`
+/// with `|safe`: escaping `<`, `>` and `&` stops data like `</script>` from
+/// ending the script block early.
+fn script_json<T: serde::Serialize>(value: &T) -> String {
+    serde_json::to_string(value)
+        .unwrap_or_else(|_| "[]".into())
+        .replace('<', "\\u003c")
+        .replace('>', "\\u003e")
+        .replace('&', "\\u0026")
+}
 
 fn render<T: Template>(t: T) -> Result<impl IntoResponse> {
     t.render()
@@ -109,6 +123,7 @@ pub async fn new_form(State(_state): State<AppState>) -> Result<impl IntoRespons
         scorecard_name:         String::new(),
         default_period_days:    String::new(),
         existing_criteria_json: "[]".to_string(),
+        existing_grades_json:   "[]".to_string(),
     })
 }
 
@@ -135,12 +150,23 @@ pub async fn edit_form(
         }));
     }
 
+    let grades_json: Vec<serde_json::Value> = db::list_grades(&state.db, id).await?
+        .iter()
+        .map(|g| serde_json::json!({
+            "name":       g.name,
+            "min_score":  g.min_score,
+            "bg_color":   g.bg_color,
+            "text_color": g.text_color,
+        }))
+        .collect();
+
     render(EditTemplate {
         is_edit:                true,
         scorecard_id:           id,
         scorecard_name:         scorecard.name,
         default_period_days:    scorecard.default_period_days.map(|d| d.to_string()).unwrap_or_default(),
-        existing_criteria_json: serde_json::to_string(&criteria_json).unwrap_or_else(|_| "[]".into()),
+        existing_criteria_json: script_json(&criteria_json),
+        existing_grades_json:   script_json(&grades_json),
     })
 }
 
@@ -150,6 +176,8 @@ pub async fn edit_form(
 pub struct ScorecardForm {
     pub name:                String,
     pub criteria_json:       String,
+    /// Absent when a client doesn't send grades; treated as "no grades".
+    pub grades_json:         Option<String>,
     pub default_period_days: Option<String>,
 }
 
@@ -177,8 +205,9 @@ pub async fn create(
     Form(form): Form<ScorecardForm>,
 ) -> Result<impl IntoResponse> {
     let criteria = parse_and_validate_criteria(&form.criteria_json)?;
+    let grades = parse_and_validate_grades(form.grades_json.as_deref())?;
     let period_days = parse_period_days(&form.default_period_days);
-    let scorecard_id = insert_scorecard_with_criteria(&state, &form.name, period_days, &criteria).await?;
+    let scorecard_id = insert_scorecard_with_criteria(&state, &form.name, period_days, &criteria, &grades).await?;
     Ok(axum::response::Redirect::to(&format!("/scorecards/{scorecard_id}")))
 }
 
@@ -192,6 +221,7 @@ pub async fn update(
     db::get_scorecard(&state.db, id).await?; // 404 if not found
 
     let criteria = parse_and_validate_criteria(&form.criteria_json)?;
+    let grades = parse_and_validate_grades(form.grades_json.as_deref())?;
 
     let mut tx = state.db.begin().await?;
 
@@ -216,6 +246,16 @@ pub async fn update(
                 criterion_id, opt.name, opt_pos as u32, opt.score_type, opt.points
             ).execute(&mut *tx).await?;
         }
+    }
+
+    // Grades are replaced wholesale too; nothing references grade ids.
+    sqlx::query!("DELETE FROM grades WHERE scorecard_id = ?", id)
+        .execute(&mut *tx).await?;
+    for g in &grades {
+        sqlx::query!(
+            "INSERT INTO grades (scorecard_id, name, min_score, bg_color, text_color) VALUES (?, ?, ?, ?, ?)",
+            id, g.name, g.min_score, g.bg_color, g.text_color
+        ).execute(&mut *tx).await?;
     }
 
     tx.commit().await?;
@@ -292,32 +332,73 @@ pub async fn delete_grade(
 /// Validates a grade form against the scorecard's other grades. `editing` is
 /// the id of the grade being updated, which is excluded from clash checks.
 fn validate_grade(form: &GradeForm, existing: &[GradeRow], editing: Option<u64>) -> Result<GradeInput> {
-    let name = form.name.trim().to_string();
+    let min_score: f64 = form.min_score.trim().parse()
+        .map_err(|_| AppError::BadRequest("Minimum score must be a number".into()))?;
+    let grade = validate_grade_fields(&form.name, min_score, &form.bg_color, &form.text_color)?;
+    let others: Vec<(&str, f64)> = existing.iter()
+        .filter(|g| Some(g.id) != editing)
+        .map(|g| (g.name.as_str(), g.min_score))
+        .collect();
+    check_grade_clash(&grade, &others)?;
+    Ok(grade)
+}
+
+fn validate_grade_fields(name: &str, min_score: f64, bg_color: &str, text_color: &str) -> Result<GradeInput> {
+    let name = name.trim().to_string();
     if name.is_empty() {
         return Err(AppError::BadRequest("Grade name cannot be empty".into()));
     }
-
-    let min_score: f64 = form.min_score.trim().parse()
-        .map_err(|_| AppError::BadRequest("Minimum score must be a number".into()))?;
     if !(0.0..=100.0).contains(&min_score) {
         return Err(AppError::BadRequest("Minimum score must be between 0 and 100".into()));
     }
+    Ok(GradeInput {
+        name,
+        min_score,
+        bg_color:   parse_hex_color(bg_color, "Background colour")?,
+        text_color: parse_hex_color(text_color, "Text colour")?,
+    })
+}
 
-    let bg_color   = parse_hex_color(&form.bg_color, "Background colour")?;
-    let text_color = parse_hex_color(&form.text_color, "Text colour")?;
-
-    for other in existing.iter().filter(|g| Some(g.id) != editing) {
-        if other.name.eq_ignore_ascii_case(&name) {
-            return Err(AppError::BadRequest(format!("A grade named '{name}' already exists")));
+/// Grade names and minimum scores must both be unique within a scorecard.
+fn check_grade_clash(grade: &GradeInput, others: &[(&str, f64)]) -> Result<()> {
+    for (name, min_score) in others {
+        if name.eq_ignore_ascii_case(&grade.name) {
+            return Err(AppError::BadRequest(format!("A grade named '{}' already exists", grade.name)));
         }
-        if other.min_score == min_score {
+        if *min_score == grade.min_score {
             return Err(AppError::BadRequest(format!(
-                "Grade '{}' already starts at {min_score}%", other.name
+                "Grade '{name}' already starts at {}%", grade.min_score
             )));
         }
     }
+    Ok(())
+}
 
-    Ok(GradeInput { name, min_score, bg_color, text_color })
+/// Parses and validates the edit page's `grades_json` (a JSON array of
+/// `{name, min_score, bg_color, text_color}`).
+fn parse_and_validate_grades(grades_json: Option<&str>) -> Result<Vec<GradeInput>> {
+    #[derive(Deserialize)]
+    struct GradeJson {
+        name:       String,
+        min_score:  f64,
+        bg_color:   String,
+        text_color: String,
+    }
+
+    let raw: Vec<GradeJson> = match grades_json.map(str::trim) {
+        None | Some("") => Vec::new(),
+        Some(json) => serde_json::from_str(json)
+            .map_err(|e| AppError::BadRequest(format!("Invalid grades JSON: {e}")))?,
+    };
+
+    let mut grades: Vec<GradeInput> = Vec::new();
+    for g in &raw {
+        let grade = validate_grade_fields(&g.name, g.min_score, &g.bg_color, &g.text_color)?;
+        let others: Vec<(&str, f64)> = grades.iter().map(|o| (o.name.as_str(), o.min_score)).collect();
+        check_grade_clash(&grade, &others)?;
+        grades.push(grade);
+    }
+    Ok(grades)
 }
 
 /// Accepts `#rrggbb` (as sent by `<input type="color">`) and normalises to lowercase.
@@ -371,6 +452,7 @@ async fn insert_scorecard_with_criteria(
     name: &str,
     default_period_days: Option<u32>,
     criteria: &[CriterionInput],
+    grades: &[GradeInput],
 ) -> Result<u64> {
     let mut tx = state.db.begin().await?;
 
@@ -391,6 +473,13 @@ async fn insert_scorecard_with_criteria(
                 criterion_id, opt.name, opt_pos as u32, opt.score_type, opt.points
             ).execute(&mut *tx).await?;
         }
+    }
+
+    for g in grades {
+        sqlx::query!(
+            "INSERT INTO grades (scorecard_id, name, min_score, bg_color, text_color) VALUES (?, ?, ?, ?, ?)",
+            scorecard_id, g.name, g.min_score, g.bg_color, g.text_color
+        ).execute(&mut *tx).await?;
     }
 
     tx.commit().await?;
