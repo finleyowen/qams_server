@@ -1,0 +1,131 @@
+{% extends "base.html" %}
+
+{% block title %} — Home{% endblock %}
+
+{% block head %}
+<style>
+.hero { margin-bottom: 28px; }
+.hero h1 { font-size: 26px; font-weight: 700; margin-bottom: 6px; }
+.hero p { color: var(--ink-mid); font-size: 15px; }
+
+.section-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 32px; }
+@media (max-width: 640px) { .section-grid { grid-template-columns: 1fr; } }
+
+.section-card {
+  background: var(--white); border: 1px solid var(--rule); border-radius: var(--radius);
+  padding: 22px 24px; display: flex; flex-direction: column; gap: 10px;
+  transition: border-color .12s, box-shadow .12s;
+}
+.section-card:hover { border-color: #c9c5bf; box-shadow: 0 1px 4px rgba(0,0,0,.04); }
+.section-card .head { display: flex; align-items: baseline; justify-content: space-between; }
+.section-card h2 { font-size: 17px; font-weight: 600; }
+.section-card h2 a { text-decoration: none; }
+.section-card h2 a:hover { text-decoration: underline; }
+.section-card .count { font-size: 26px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.section-card .desc { color: var(--ink-mid); font-size: 14px; line-height: 1.5; flex: 1; }
+.section-card .actions { display: flex; gap: 8px; margin-top: 4px; }
+
+.section-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.section-heading h2 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-soft); }
+.section-heading a { font-size: 14px; color: var(--ink-mid); }
+.muted { color: var(--ink-soft); }
+</style>
+{% endblock %}
+
+{% block body %}
+<div class="shell">
+  <div class="hero">
+    <h1>Quality Assurance Management System</h1>
+    <p>Build scorecards, review agents, and track performance across reporting periods.</p>
+  </div>
+
+  <div class="section-grid">
+    <div class="section-card">
+      <div class="head">
+        <h2><a href="/scorecards">Scorecards</a></h2>
+        <span class="count">{{ scorecard_count }}</span>
+      </div>
+      <p class="desc">Define the criteria and scoring options that reviews are measured against.</p>
+      <div class="actions">
+        <a href="/scorecards/new" class="btn btn-primary btn-sm">+ New scorecard</a>
+        <a href="/scorecards" class="btn btn-secondary btn-sm">View all</a>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="head">
+        <h2><a href="/agents">Agents</a></h2>
+        <span class="count">{{ agent_count }}</span>
+      </div>
+      <p class="desc">Manage the people being reviewed and their metadata.</p>
+      <div class="actions">
+        <a href="/agents/new" class="btn btn-primary btn-sm">+ New agent</a>
+        <a href="/agents" class="btn btn-secondary btn-sm">View all</a>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="head">
+        <h2><a href="/reviews">Reviews</a></h2>
+        <span class="count">{{ review_count }}</span>
+      </div>
+      <p class="desc">Score an agent's work against a scorecard, with comments on each criterion.</p>
+      <div class="actions">
+        <a href="/reviews" class="btn btn-primary btn-sm">Conduct a review</a>
+      </div>
+    </div>
+
+    <div class="section-card">
+      <div class="head">
+        <h2><a href="/reports">Reports</a></h2>
+        <span class="count">{{ report_count }}</span>
+      </div>
+      <p class="desc">Summarise reviews over a reporting period and compare against previous reports.</p>
+      <div class="actions">
+        <a href="/reports/new" class="btn btn-primary btn-sm">+ Generate report</a>
+        <a href="/reports" class="btn btn-secondary btn-sm">View all</a>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-heading">
+    <h2>Recent reports</h2>
+    {% if report_count > 0 %}<a href="/reports">All reports →</a>{% endif %}
+  </div>
+
+  {% if recent_reports.is_empty() %}
+  <div class="card">
+    <div class="empty-state">
+      <p>No reports yet.</p>
+      <a href="/reports/new" class="btn btn-primary">Generate your first report</a>
+    </div>
+  </div>
+  {% else %}
+  <div class="card">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Report</th>
+          <th>Scorecard</th>
+          <th>Period</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in recent_reports %}
+        <tr>
+          <td><a href="/reports/{{ r.id }}">{{ r.label }}</a></td>
+          <td>{{ r.scorecard_name }}</td>
+          <td class="muted">{{ r.start_date }} – {{ r.end_date }}</td>
+          <td style="text-align:right">
+            <a href="/reports/{{ r.id }}/summary" class="btn btn-ghost btn-sm">Summary</a>
+            <a href="/reports/{{ r.id }}/agents" class="btn btn-ghost btn-sm">Agents</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

@@ -337,3 +337,8 @@ pub async fn last_report_end_date(
     ).fetch_optional(db).await?;
     Ok(row.map(|r| r.end_date))
 }
+pub async fn count_reviews(db: &MySqlPool) -> Result<u64> {
+    let row = sqlx::query!("SELECT COUNT(*) as count FROM reviews")
+        .fetch_one(db).await?;
+    Ok(row.count as u64)
+}

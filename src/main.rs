@@ -62,6 +62,8 @@ async fn main() {
 
 pub fn router(state: AppState) -> Router {
     Router::new()
+        .route("/",                        get(handlers::home::index))
+
         // ── Scorecards ────────────────────────────────────────────────────
         .route("/scorecards",              get(handlers::scorecards::list)
                                           .post(handlers::scorecards::create))
