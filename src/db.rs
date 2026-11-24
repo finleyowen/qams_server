@@ -342,3 +342,53 @@ pub async fn count_reviews(db: &MySqlPool) -> Result<u64> {
         .fetch_one(db).await?;
     Ok(row.count as u64)
 }
+
+// ── Grades ────────────────────────────────────────────────────────────────────
+
+/// Grades for a scorecard, lowest `min_score` first.
+pub async fn list_grades(db: &MySqlPool, scorecard_id: u64) -> Result<Vec<GradeRow>> {
+    Ok(sqlx::query_as!(
+        GradeRow,
+        "SELECT id, scorecard_id, name, min_score, bg_color, text_color, created_at
+         FROM grades WHERE scorecard_id = ? ORDER BY min_score ASC",
+        scorecard_id
+    ).fetch_all(db).await?)
+}
+
+pub async fn insert_grade(
+    db: &MySqlPool,
+    scorecard_id: u64,
+    name: &str,
+    min_score: f64,
+    bg_color: &str,
+    text_color: &str,
+) -> Result<u64> {
+    let result = sqlx::query!(
+        "INSERT INTO grades (scorecard_id, name, min_score, bg_color, text_color) VALUES (?, ?, ?, ?, ?)",
+        scorecard_id, name, min_score, bg_color, text_color
+    ).execute(db).await?;
+    Ok(result.last_insert_id())
+}
+
+pub async fn update_grade(
+    db: &MySqlPool,
+    scorecard_id: u64,
+    id: u64,
+    name: &str,
+    min_score: f64,
+    bg_color: &str,
+    text_color: &str,
+) -> Result<()> {
+    sqlx::query!(
+        "UPDATE grades SET name = ?, min_score = ?, bg_color = ?, text_color = ?
+         WHERE id = ? AND scorecard_id = ?",
+        name, min_score, bg_color, text_color, id, scorecard_id
+    ).execute(db).await?;
+    Ok(())
+}
+
+pub async fn delete_grade(db: &MySqlPool, scorecard_id: u64, id: u64) -> Result<()> {
+    sqlx::query!("DELETE FROM grades WHERE id = ? AND scorecard_id = ?", id, scorecard_id)
+        .execute(db).await?;
+    Ok(())
+}

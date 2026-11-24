@@ -1,14 +1,17 @@
 use askama::Template;
 use axum::{
+    body::Body,
     extract::{Path, State},
-    response::{Html, IntoResponse},
+    http::{header, HeaderValue},
+    response::{Html, IntoResponse, Response},
     Form,
 };
 use serde::Deserialize;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use qams_core::{Report, Review, Scorecard};
-use crate::{db, error::{AppError, Result}, models::ReviewRow, AppState};
+use crate::{db, error::{AppError, Result}, models::{grade_for, GradeRow, ReviewRow}, AppState};
+use rust_xlsxwriter::{Color, Format, Workbook, Worksheet};
 
 // ── Shared presentation types ─────────────────────────────────────────────────
 
@@ -23,14 +26,21 @@ pub struct TableCell {
     pub is_empty: bool,
     pub value:    f64,
     pub display:  String,
+    /// The scorecard grade this score falls in, if the scorecard has grades.
+    pub grade:    Option<GradeRow>,
 }
 
 impl TableCell {
-    fn some(score: f64) -> Self {
-        TableCell { is_empty: false, value: score * 100.0, display: format!("{:.0}%", score * 100.0) }
+    fn some(score: f64, grades: &[GradeRow]) -> Self {
+        TableCell {
+            is_empty: false,
+            value:    score * 100.0,
+            display:  format!("{:.0}%", score * 100.0),
+            grade:    grade_for(grades, score).cloned(),
+        }
     }
     fn none() -> Self {
-        TableCell { is_empty: true, value: 0.0, display: String::new() }
+        TableCell { is_empty: true, value: 0.0, display: String::new(), grade: None }
     }
 }
 
@@ -52,6 +62,7 @@ pub struct ReviewHeader {
     pub date:          String,
     pub reviewer:      String,
     pub score_display: Option<String>,
+    pub grade:         Option<GradeRow>,
 }
 
 /// A cell in the individual agent criterion table.
@@ -112,6 +123,7 @@ struct SummaryTemplate {
     report_label:  String,
     column_labels: Vec<ColLabel>,
     rows:          Vec<SummaryRow>,
+    grades:         Vec<GradeRow>,
 }
 
 #[derive(Template)]
@@ -121,6 +133,7 @@ struct AgentIndexTemplate {
     report_label:  String,
     column_labels: Vec<ColLabel>,
     rows:          Vec<AgentIndexRow>,
+    grades:         Vec<GradeRow>,
 }
 
 #[derive(Template)]
@@ -131,6 +144,7 @@ struct AgentPageTemplate {
     agent_name:     String,
     review_headers: Vec<ReviewHeader>,
     criterion_rows: Vec<AgentCriterionRow>,
+    grades:         Vec<GradeRow>,
 }
 
 fn render<T: Template>(t: T) -> Result<impl IntoResponse> {
@@ -208,6 +222,7 @@ pub async fn summary(
     Path(id): Path<u64>,
 ) -> Result<impl IntoResponse> {
     let (report, scorecard) = load_report_with_history(&state, id).await?;
+    let grades = report_grades(&state, id).await?;
     let chain = report.report_chain();
 
     let column_labels: Vec<ColLabel> = chain.iter().map(|r| ColLabel {
@@ -218,7 +233,7 @@ pub async fn summary(
     let rows: Vec<SummaryRow> = scorecard.criterion_order().iter().map(|crit| {
         let cells = chain.iter().map(|r| {
             match r.team_criterion_average(&scorecard, crit) {
-                Some(avg) => TableCell::some(avg),
+                Some(avg) => TableCell::some(avg, &grades),
                 None      => TableCell::none(),
             }
         }).collect();
@@ -230,6 +245,7 @@ pub async fn summary(
         report_label: report.label().to_string(),
         column_labels,
         rows,
+        grades,
     })
 }
 
@@ -238,6 +254,7 @@ pub async fn agent_index(
     Path(id): Path<u64>,
 ) -> Result<impl IntoResponse> {
     let (report, _scorecard) = load_report_with_history(&state, id).await?;
+    let grades = report_grades(&state, id).await?;
     let chain = report.report_chain();
 
     let column_labels: Vec<ColLabel> = chain.iter().map(|r| ColLabel {
@@ -264,7 +281,7 @@ pub async fn agent_index(
     let rows: Vec<AgentIndexRow> = all_agents.iter().map(|agent| {
         let cells = chain.iter().map(|r| {
             match r.agent_average_score(agent) {
-                Some(avg) => TableCell::some(avg),
+                Some(avg) => TableCell::some(avg, &grades),
                 None      => TableCell::none(),
             }
         }).collect();
@@ -280,6 +297,7 @@ pub async fn agent_index(
         report_label: report.label().to_string(),
         column_labels,
         rows,
+        grades,
     })
 }
 
@@ -288,6 +306,7 @@ pub async fn agent_page(
     Path((id, agent_id)): Path<(u64, u64)>,
 ) -> Result<impl IntoResponse> {
     let (report, scorecard) = load_report_with_history(&state, id).await?;
+    let grades = report_grades(&state, id).await?;
     let agent = db::get_agent(&state.db, agent_id).await?;
     let agent_name = &agent.name;
 
@@ -299,6 +318,7 @@ pub async fn agent_page(
             date:          r.date().to_string(),
             reviewer:      r.reviewer().to_string(),
             score_display: Some(format!("{score_pct:.0}%")),
+            grade:         grade_for(&grades, r.effective_score()).cloned(),
         }
     }).collect();
 
@@ -337,7 +357,35 @@ pub async fn agent_page(
         agent_name:     agent_name.clone(),
         review_headers,
         criterion_rows,
+        grades,
     })
+}
+
+/// GET /reports/{id}/export — the whole report (overview, overall summary,
+/// agent-report index and one sheet per agent) as a single Excel workbook.
+pub async fn export(
+    State(state): State<AppState>,
+    Path(id): Path<u64>,
+) -> Result<impl IntoResponse> {
+    let row                 = db::get_report(&state.db, id).await?;
+    let (report, scorecard) = load_report_with_history(&state, id).await?;
+    let scorecard_name      = db::get_scorecard(&state.db, row.scorecard_id).await?.name;
+    let grades              = db::list_grades(&state.db, row.scorecard_id).await?;
+
+    let workbook_bytes = build_report_workbook(&report, &scorecard, &scorecard_name, &grades)?;
+    let filename = sanitize_filename(&format!("{}-{}.xlsx", report.label().to_lowercase(), id));
+
+    let mut response = Response::new(Body::from(workbook_bytes));
+    response.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    );
+    response.headers_mut().insert(
+        header::CONTENT_DISPOSITION,
+        HeaderValue::from_str(&format!("attachment; filename=\"{filename}\""))
+            .map_err(|e| AppError::Internal(format!("Header error: {e}")))?,
+    );
+    Ok(response)
 }
 
 #[derive(Deserialize)]
@@ -429,6 +477,12 @@ pub async fn load_report_with_history(state: &AppState, report_id: u64) -> Resul
     ), scorecard))
 }
 
+/// Grades of the scorecard a report was generated from, lowest first.
+async fn report_grades(state: &AppState, report_id: u64) -> Result<Vec<GradeRow>> {
+    let row = db::get_report(&state.db, report_id).await?;
+    db::list_grades(&state.db, row.scorecard_id).await
+}
+
 async fn build_agent_name_map(state: &AppState, _scorecard_id: u64) -> Result<HashMap<u64, String>> {
     Ok(db::list_agents(&state.db).await?.into_iter().map(|a| (a.id, a.name)).collect())
 }
@@ -454,4 +508,195 @@ fn review_rows_to_core(rows: &[ReviewRow], agent_names: &HashMap<u64, String>) -
         Review::new(agent_name, r.reviewer.clone(), r.date.to_string(),
             selections, comments, r.score, r.adj_score, HashMap::new())
     }).collect()
+}
+// ── Excel export ──────────────────────────────────────────────────────────────
+
+fn xlsx_err(e: rust_xlsxwriter::XlsxError) -> AppError {
+    AppError::Internal(format!("Workbook error: {e}"))
+}
+
+fn build_report_workbook(
+    report: &Report,
+    scorecard: &Scorecard,
+    scorecard_name: &str,
+    grades: &[GradeRow],
+) -> Result<Vec<u8>> {
+    let mut workbook = Workbook::new();
+    let scores = ScoreFormats::new(grades);
+
+    // Overview
+    let overview = workbook.add_worksheet();
+    overview.set_name("Overview").map_err(xlsx_err)?;
+    write_string(overview, 0, 0, "Report")?;
+    write_string(overview, 0, 1, report.label())?;
+    write_string(overview, 1, 0, "Scorecard")?;
+    write_string(overview, 1, 1, scorecard_name)?;
+    write_string(overview, 2, 0, "Period")?;
+    write_string(overview, 2, 1, format!("{} → {}", report.start_date(), report.end_date()))?;
+    write_string(overview, 3, 0, "Reviews")?;
+    write_number(overview, 3, 1, report.reviews().len() as f64)?;
+    write_string(overview, 4, 0, "Agents")?;
+    write_number(overview, 4, 1, report.agents().len() as f64)?;
+
+    if !grades.is_empty() {
+        write_string(overview, 6, 0, "Grades")?;
+        write_string(overview, 6, 1, "Minimum %")?;
+        for (i, (grade, format)) in grades.iter().zip(&scores.graded).enumerate() {
+            let row = 7 + i as u32;
+            overview.write_string_with_format(row, 0, grade.name.as_str(), format).map_err(xlsx_err)?;
+            write_number(overview, row, 1, grade.min_score)?;
+        }
+    }
+    overview.set_column_width(0, 16).map_err(xlsx_err)?;
+
+    // Overall summary: criteria × reports
+    let chain = report.report_chain();
+    let summary = workbook.add_worksheet();
+    summary.set_name("Summary").map_err(xlsx_err)?;
+    write_string(summary, 0, 0, "Criterion")?;
+    for (col, item) in chain.iter().enumerate() {
+        write_string(summary, 0, col as u16 + 1, item.label())?;
+    }
+    for (row, criterion) in scorecard.criterion_order().iter().enumerate() {
+        write_string(summary, row as u32 + 1, 0, criterion.as_str())?;
+        for (col, item) in chain.iter().enumerate() {
+            if let Some(avg) = item.team_criterion_average(scorecard, criterion) {
+                scores.write(summary, row as u32 + 1, col as u16 + 1, avg)?;
+            }
+        }
+    }
+
+    // Agent-report index: agents × reports
+    let mut agents: Vec<&str> = Vec::new();
+    for item in &chain {
+        for agent in item.agents() {
+            if !agents.contains(&agent) {
+                agents.push(agent);
+            }
+        }
+    }
+
+    let agent_index = workbook.add_worksheet();
+    agent_index.set_name("Agent Index").map_err(xlsx_err)?;
+    write_string(agent_index, 0, 0, "Agent")?;
+    for (col, item) in chain.iter().enumerate() {
+        write_string(agent_index, 0, col as u16 + 1, item.label())?;
+    }
+    for (row, agent) in agents.iter().enumerate() {
+        write_string(agent_index, row as u32 + 1, 0, *agent)?;
+        for (col, item) in chain.iter().enumerate() {
+            if let Some(avg) = item.agent_average_score(agent) {
+                scores.write(agent_index, row as u32 + 1, col as u16 + 1, avg)?;
+            }
+        }
+    }
+
+    // One sheet per agent with reviews in this report
+    let mut used_names: HashSet<String> = ["Overview", "Summary", "Agent Index"]
+        .iter().map(|s| s.to_lowercase()).collect();
+    for agent in report.agents() {
+        let sheet_name = unique_sheet_name(agent, &mut used_names);
+        let sheet = workbook.add_worksheet();
+        sheet.set_name(&sheet_name).map_err(xlsx_err)?;
+        let reviews = report.agent_reviews(agent);
+        write_string(sheet, 0, 0, "Criterion")?;
+        for (col, review) in reviews.iter().enumerate() {
+            write_string(sheet, 0, col as u16 + 1, format!("{} ({})", review.date(), review.reviewer()))?;
+        }
+        write_string(sheet, 1, 0, "Score")?;
+        for (col, review) in reviews.iter().enumerate() {
+            scores.write(sheet, 1, col as u16 + 1, review.effective_score())?;
+        }
+        // Index by review rather than using `agent_criterion_selections`, so a
+        // review that skipped a criterion leaves a gap instead of shifting
+        // later selections into the wrong column.
+        for (row, criterion) in scorecard.criterion_order().iter().enumerate() {
+            write_string(sheet, row as u32 + 2, 0, criterion.as_str())?;
+            for (col, review) in reviews.iter().enumerate() {
+                if let Some(option) = review.selection(criterion) {
+                    write_string(sheet, row as u32 + 2, col as u16 + 1, option)?;
+                }
+            }
+        }
+    }
+
+    workbook.save_to_buffer().map_err(xlsx_err)
+}
+
+/// Cell formats for percentage scores, one per grade (same order as the
+/// grades) plus a plain one for scores below every grade or with no grades.
+struct ScoreFormats<'a> {
+    grades: &'a [GradeRow],
+    graded: Vec<Format>,
+    plain:  Format,
+}
+
+impl<'a> ScoreFormats<'a> {
+    /// Scores are written as 0–100 and displayed like the HTML report ("85%").
+    const NUM_FORMAT: &'static str = "0\"%\"";
+
+    fn new(grades: &'a [GradeRow]) -> Self {
+        let graded = grades.iter().map(|g| {
+            Format::new()
+                .set_num_format(Self::NUM_FORMAT)
+                .set_background_color(hex_color(&g.bg_color))
+                .set_font_color(hex_color(&g.text_color))
+        }).collect();
+        ScoreFormats { grades, graded, plain: Format::new().set_num_format(Self::NUM_FORMAT) }
+    }
+
+    /// Writes a score given as a fraction (0.0–1.0), coloured by its grade.
+    fn write(&self, sheet: &mut Worksheet, row: u32, col: u16, score: f64) -> Result<()> {
+        let format = grade_for(self.grades, score)
+            .and_then(|g| self.grades.iter().position(|x| x.id == g.id))
+            .map(|i| &self.graded[i])
+            .unwrap_or(&self.plain);
+        sheet.write_number_with_format(row, col, score * 100.0, format).map_err(xlsx_err)?;
+        Ok(())
+    }
+}
+
+/// Parses a validated `#rrggbb` grade colour.
+fn hex_color(hex: &str) -> Color {
+    Color::RGB(u32::from_str_radix(hex.trim_start_matches('#'), 16).unwrap_or(0))
+}
+
+/// Excel sheet names must be ≤31 chars, unique (case-insensitively) and free
+/// of `/ \\ ? * [ ] :`.
+fn unique_sheet_name(value: &str, used: &mut HashSet<String>) -> String {
+    let cleaned: String = value.chars()
+        .map(|ch| if "/\\?*[]:".contains(ch) { ' ' } else { ch })
+        .collect();
+    let base: String = match cleaned.trim() {
+        ""      => "Agent".to_string(),
+        trimmed => trimmed.chars().take(31).collect(),
+    };
+
+    let mut name = base.clone();
+    let mut n = 2;
+    while !used.insert(name.to_lowercase()) {
+        let suffix = format!(" ({n})");
+        let keep = 31 - suffix.chars().count();
+        name = format!("{}{suffix}", base.chars().take(keep).collect::<String>());
+        n += 1;
+    }
+    name
+}
+
+fn sanitize_filename(value: &str) -> String {
+    let cleaned: String = value.chars()
+        .map(|ch| if "/\\?*[]:<>|\" ".contains(ch) { '-' } else { ch })
+        .collect();
+    let cleaned = cleaned.trim_matches(|c| c == '.' || c == '-').to_string();
+    if cleaned.is_empty() { "report.xlsx".to_string() } else { cleaned }
+}
+
+fn write_string(sheet: &mut Worksheet, row: u32, col: u16, value: impl Into<String>) -> Result<()> {
+    sheet.write_string(row, col, value).map_err(xlsx_err)?;
+    Ok(())
+}
+
+fn write_number(sheet: &mut Worksheet, row: u32, col: u16, value: f64) -> Result<()> {
+    sheet.write_number(row, col, value).map_err(xlsx_err)?;
+    Ok(())
 }

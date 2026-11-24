@@ -1,0 +1,8 @@
+{% if !grades.is_empty() %}
+<div class="grade-legend">
+  <span class="grade-legend-title">Grades</span>
+  {% for g in grades %}
+  <span class="grade-chip" style="background:{{ g.bg_color }};color:{{ g.text_color }}">{{ g.name }} <span class="min">≥ {{ g.min_score }}%</span></span>
+  {% endfor %}
+</div>
+{% endif %}

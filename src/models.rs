@@ -72,3 +72,25 @@ pub struct ReportRow {
     pub accumulation_period:  Option<u32>,
     pub created_at:           NaiveDateTime,
 }
+/// A named score band on a scorecard. A score receives the grade with the
+/// highest `min_score` it reaches.
+#[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
+pub struct GradeRow {
+    pub id:           u64,
+    pub scorecard_id: u64,
+    pub name:         String,
+    /// Minimum score as a percentage (0–100).
+    pub min_score:    f64,
+    /// CSS hex colour, e.g. "#16a34a".
+    pub bg_color:     String,
+    pub text_color:   String,
+    pub created_at:   NaiveDateTime,
+}
+
+/// The grade for a score given as a fraction (0.0–1.0), if any.
+/// `grades` must be sorted by `min_score` ascending (as `db::list_grades` returns them).
+pub fn grade_for(grades: &[GradeRow], score: f64) -> Option<&GradeRow> {
+    // Round to the displayed precision so "80%" never shows as below an 80 threshold.
+    let pct = (score * 1000.0).round() / 10.0;
+    grades.iter().rev().find(|g| pct >= g.min_score)
+}

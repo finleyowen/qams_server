@@ -7,7 +7,7 @@ use axum::{
 };
 use serde::Deserialize;
 
-use crate::{db, error::{AppError, Result}, models::{CriterionOptionRow, ScorecardRow}, AppState};
+use crate::{db, error::{AppError, Result}, models::{CriterionOptionRow, GradeRow, ScorecardRow}, AppState};
 
 // ── Template types ────────────────────────────────────────────────────────────
 
@@ -38,6 +38,7 @@ struct ListTemplate {
 struct ShowTemplate {
     scorecard: ScorecardRow,
     criteria:  Vec<CriterionWithOptions>,
+    grades:    Vec<GradeRow>,
 }
 
 #[derive(Template)]
@@ -96,7 +97,9 @@ pub async fn show(
         });
     }
 
-    render(ShowTemplate { scorecard, criteria })
+    let grades = db::list_grades(&state.db, id).await?;
+
+    render(ShowTemplate { scorecard, criteria, grades })
 }
 
 pub async fn new_form(State(_state): State<AppState>) -> Result<impl IntoResponse> {
@@ -227,6 +230,106 @@ pub async fn delete(
 ) -> Result<impl IntoResponse> {
     db::delete_scorecard(&state.db, id).await?;
     Ok(axum::response::Redirect::to("/scorecards"))
+}
+
+// ── Grades ────────────────────────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct GradeForm {
+    pub name:       String,
+    /// Kept as a string so a blank input gives a clear error rather than a
+    /// form-rejection.
+    pub min_score:  String,
+    pub bg_color:   String,
+    pub text_color: String,
+}
+
+/// A grade form after validation.
+struct GradeInput {
+    name:       String,
+    min_score:  f64,
+    bg_color:   String,
+    text_color: String,
+}
+
+/// POST /scorecards/{id}/grades
+pub async fn create_grade(
+    State(state): State<AppState>,
+    Path(id): Path<u64>,
+    Form(form): Form<GradeForm>,
+) -> Result<impl IntoResponse> {
+    db::get_scorecard(&state.db, id).await?;
+    let existing = db::list_grades(&state.db, id).await?;
+    let g = validate_grade(&form, &existing, None)?;
+    db::insert_grade(&state.db, id, &g.name, g.min_score, &g.bg_color, &g.text_color).await?;
+    Ok(axum::response::Redirect::to(&format!("/scorecards/{id}#grades")))
+}
+
+/// POST /scorecards/{id}/grades/{grade_id}
+pub async fn update_grade(
+    State(state): State<AppState>,
+    Path((id, grade_id)): Path<(u64, u64)>,
+    Form(form): Form<GradeForm>,
+) -> Result<impl IntoResponse> {
+    let existing = db::list_grades(&state.db, id).await?;
+    if !existing.iter().any(|g| g.id == grade_id) {
+        return Err(AppError::NotFound);
+    }
+    let g = validate_grade(&form, &existing, Some(grade_id))?;
+    db::update_grade(&state.db, id, grade_id, &g.name, g.min_score, &g.bg_color, &g.text_color).await?;
+    Ok(axum::response::Redirect::to(&format!("/scorecards/{id}#grades")))
+}
+
+/// POST /scorecards/{id}/grades/{grade_id}/delete
+pub async fn delete_grade(
+    State(state): State<AppState>,
+    Path((id, grade_id)): Path<(u64, u64)>,
+) -> Result<impl IntoResponse> {
+    db::delete_grade(&state.db, id, grade_id).await?;
+    Ok(axum::response::Redirect::to(&format!("/scorecards/{id}#grades")))
+}
+
+/// Validates a grade form against the scorecard's other grades. `editing` is
+/// the id of the grade being updated, which is excluded from clash checks.
+fn validate_grade(form: &GradeForm, existing: &[GradeRow], editing: Option<u64>) -> Result<GradeInput> {
+    let name = form.name.trim().to_string();
+    if name.is_empty() {
+        return Err(AppError::BadRequest("Grade name cannot be empty".into()));
+    }
+
+    let min_score: f64 = form.min_score.trim().parse()
+        .map_err(|_| AppError::BadRequest("Minimum score must be a number".into()))?;
+    if !(0.0..=100.0).contains(&min_score) {
+        return Err(AppError::BadRequest("Minimum score must be between 0 and 100".into()));
+    }
+
+    let bg_color   = parse_hex_color(&form.bg_color, "Background colour")?;
+    let text_color = parse_hex_color(&form.text_color, "Text colour")?;
+
+    for other in existing.iter().filter(|g| Some(g.id) != editing) {
+        if other.name.eq_ignore_ascii_case(&name) {
+            return Err(AppError::BadRequest(format!("A grade named '{name}' already exists")));
+        }
+        if other.min_score == min_score {
+            return Err(AppError::BadRequest(format!(
+                "Grade '{}' already starts at {min_score}%", other.name
+            )));
+        }
+    }
+
+    Ok(GradeInput { name, min_score, bg_color, text_color })
+}
+
+/// Accepts `#rrggbb` (as sent by `<input type="color">`) and normalises to lowercase.
+fn parse_hex_color(value: &str, field: &str) -> Result<String> {
+    let v = value.trim();
+    let valid = v.len() == 7
+        && v.starts_with('#')
+        && v[1..].chars().all(|c| c.is_ascii_hexdigit());
+    if !valid {
+        return Err(AppError::BadRequest(format!("{field} must be a hex colour like #16a34a")));
+    }
+    Ok(v.to_ascii_lowercase())
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

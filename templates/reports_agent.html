@@ -27,6 +27,12 @@
 .opt-na       { color: #4b5563; }
 .opt-autofail { color: var(--danger); font-weight: 600; }
 .opt-full     { color: var(--success); font-weight: 600; }
+.grade-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 16px; }
+.grade-legend-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); margin-right: 4px; }
+.grade-chip { display: inline-flex; align-items: center; gap: 5px; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1px solid rgba(0,0,0,.06); }
+.grade-chip .min { font-weight: 400; opacity: .8; }
+.cell-graded { font-weight: 600; }
+.cell-graded .grade-name { display: block; font-size: 11px; font-weight: 500; opacity: .85; margin-top: 1px; }
 </style>
 {% endblock %}
 
@@ -36,6 +42,7 @@
     <h1>{{ agent_name }}</h1>
     <div style="display:flex;gap:8px">
       <a href="/reports/{{ report_id }}/agents" class="btn btn-secondary">← Agent index</a>
+      <a href="/reports/{{ report_id }}/export" class="btn btn-primary" download>Export to Excel</a>
     </div>
   </div>
 
@@ -49,6 +56,8 @@
     <p>No reviews for {{ agent_name }} in this reporting period.</p>
   </div>
   {% else %}
+  {% include "_grade_legend.html" %}
+
   <div class="card">
     <div class="card-body" style="overflow-x:auto">
       <table class="report-table">
@@ -60,7 +69,11 @@
               {{ header.date }}
               <br><span class="sub-header reviewer">{{ header.reviewer }}</span>
               {% if let Some(score) = header.score_display %}
+              {% if let Some(g) = header.grade %}
+              <br><span class="grade-chip" style="background:{{ g.bg_color }};color:{{ g.text_color }};margin-top:4px" title="{{ g.name }}">{{ score }} · {{ g.name }}</span>
+              {% else %}
               <br><span class="sub-header" style="color:var(--accent)">{{ score }}</span>
+              {% endif %}
               {% endif %}
             </th>
             {% endfor %}

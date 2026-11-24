@@ -72,6 +72,11 @@ pub fn router(state: AppState) -> Router {
         .route("/scorecards/{id}/edit",    get(handlers::scorecards::edit_form)
                                           .post(handlers::scorecards::update))
         .route("/scorecards/{id}/delete",  post(handlers::scorecards::delete))
+        .route("/scorecards/{id}/grades",  post(handlers::scorecards::create_grade))
+        .route("/scorecards/{id}/grades/{grade_id}",
+                                           post(handlers::scorecards::update_grade))
+        .route("/scorecards/{id}/grades/{grade_id}/delete",
+                                           post(handlers::scorecards::delete_grade))
 
         // ── Agents ────────────────────────────────────────────────────────
         .route("/agents",                  get(handlers::agents::list)
@@ -93,6 +98,7 @@ pub fn router(state: AppState) -> Router {
                                           .post(handlers::reports::generate))
         .route("/reports/new",              get(handlers::reports::new_form))
         .route("/reports/{id}",            get(handlers::reports::show))
+        .route("/reports/{id}/export",     get(handlers::reports::export))
         .route("/reports/{id}/summary",    get(handlers::reports::summary))
         .route("/reports/{id}/agents",     get(handlers::reports::agent_index))
         .route("/reports/{id}/agents/{agent_id}", get(handlers::reports::agent_page))

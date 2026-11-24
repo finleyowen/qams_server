@@ -3,6 +3,38 @@
 {% block title %} — {{ scorecard.name }}{% endblock %}
 {% block nav_scorecards %}class="active"{% endblock %}
 
+{% block head %}
+<style>
+.grade-row {
+  display: grid; grid-template-columns: 150px 1fr 110px 64px 64px auto;
+  gap: 10px; align-items: end; padding: 12px 0; border-bottom: 1px solid var(--rule);
+}
+.grade-row:last-child { border-bottom: none; padding-bottom: 0; }
+.grade-row label { display: block; font-size: 11px; font-weight: 600; color: var(--ink-soft); margin-bottom: 4px; }
+.grade-row .form-control { padding: 6px 8px; }
+.grade-row input[type=color] {
+  width: 100%; height: 33px; padding: 2px; border: 1px solid var(--rule);
+  border-radius: var(--radius); background: var(--white); cursor: pointer;
+}
+.grade-row .row-actions { display: flex; gap: 6px; }
+.grade-chip {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  height: 33px; padding: 0 12px; border-radius: var(--radius);
+  font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden;
+  border: 1px solid rgba(0,0,0,.06);
+}
+.grade-chip .min { font-weight: 400; opacity: .8; }
+.grade-new { background: var(--surface); margin: 12px -24px -24px; padding: 16px 24px 20px;
+             border-top: 1px solid var(--rule); border-radius: 0 0 var(--radius) var(--radius); }
+.grade-new .grade-row { border-bottom: none; padding: 0; }
+.hint { font-size: 13px; color: var(--ink-soft); margin-bottom: 4px; }
+@media (max-width: 760px) {
+  .grade-row { grid-template-columns: 1fr 1fr; }
+  .grade-row .chip-cell, .grade-row .row-actions { grid-column: 1 / -1; }
+}
+</style>
+{% endblock %}
+
 {% block body %}
 <div class="shell">
   <div class="page-header">
@@ -13,6 +45,78 @@
             onsubmit="return confirm('Delete this scorecard and all its data?')">
         <button type="submit" class="btn btn-danger">Delete</button>
       </form>
+    </div>
+  </div>
+
+  <div class="card" id="grades">
+    <div class="card-body">
+      <div class="card-title">Grades</div>
+      <p class="hint">
+        Reports colour each score using the grade with the highest minimum it reaches.
+        {% if grades.is_empty() %}This scorecard has no grades yet, so reports use the default colours.{% endif %}
+      </p>
+
+      {% for g in grades %}
+      <form method="post" action="/scorecards/{{ scorecard.id }}/grades/{{ g.id }}" class="grade-row">
+        <div class="chip-cell">
+          <span class="grade-chip" style="background:{{ g.bg_color }};color:{{ g.text_color }}">
+            <span class="name">{{ g.name }}</span><span class="min">≥ {{ g.min_score }}%</span>
+          </span>
+        </div>
+        <div>
+          <label>Name</label>
+          <input class="form-control" name="name" value="{{ g.name }}" required>
+        </div>
+        <div>
+          <label>Minimum %</label>
+          <input class="form-control" name="min_score" type="number" min="0" max="100" step="any" value="{{ g.min_score }}" required>
+        </div>
+        <div>
+          <label>Fill</label>
+          <input type="color" name="bg_color" value="{{ g.bg_color }}" title="Background colour">
+        </div>
+        <div>
+          <label>Text</label>
+          <input type="color" name="text_color" value="{{ g.text_color }}" title="Text colour">
+        </div>
+        <div class="row-actions">
+          <button type="submit" class="btn btn-secondary btn-sm">Save</button>
+          <button type="submit" class="btn btn-danger btn-sm" formnovalidate
+                  formaction="/scorecards/{{ scorecard.id }}/grades/{{ g.id }}/delete"
+                  data-name="{{ g.name }}"
+                  onclick="return confirm('Delete the ' + this.dataset.name + ' grade?')">Delete</button>
+        </div>
+      </form>
+      {% endfor %}
+
+      <div class="grade-new">
+        <form method="post" action="/scorecards/{{ scorecard.id }}/grades" class="grade-row">
+          <div class="chip-cell">
+            <span class="grade-chip" style="background:#dcfce7;color:#166534">
+              <span class="name">New grade</span><span class="min"></span>
+            </span>
+          </div>
+          <div>
+            <label>Name</label>
+            <input class="form-control" name="name" placeholder="e.g. Exceeds" required>
+          </div>
+          <div>
+            <label>Minimum %</label>
+            <input class="form-control" name="min_score" type="number" min="0" max="100" step="any" placeholder="80" required>
+          </div>
+          <div>
+            <label>Fill</label>
+            <input type="color" name="bg_color" value="#dcfce7" title="Background colour">
+          </div>
+          <div>
+            <label>Text</label>
+            <input type="color" name="text_color" value="#166534" title="Text colour">
+          </div>
+          <div class="row-actions">
+            <button type="submit" class="btn btn-primary btn-sm">+ Add grade</button>
+          </div>
+        </form>
+      </div>
     </div>
   </div>
 
@@ -38,4 +142,19 @@
   </div>
   {% endfor %}
 </div>
+
+<script>
+// Live-preview the chip as a grade's fields are edited.
+document.querySelectorAll('.grade-row').forEach(function (row) {
+  const chip = row.querySelector('.grade-chip');
+  function sync() {
+    chip.style.background = row.elements.bg_color.value;
+    chip.style.color      = row.elements.text_color.value;
+    chip.querySelector('.name').textContent = row.elements.name.value.trim() || 'New grade';
+    const min = row.elements.min_score.value;
+    chip.querySelector('.min').textContent = min === '' ? '' : '≥ ' + min + '%';
+  }
+  row.addEventListener('input', sync);
+});
+</script>
 {% endblock %}
